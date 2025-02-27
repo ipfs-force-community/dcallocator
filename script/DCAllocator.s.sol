@@ -18,12 +18,12 @@ contract DCAllocatorScript is Script {
         initialCommittee[1] = 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC; // 示例地址，请替换为实际地址
         initialCommittee[2] = 0x90F79bf6EB2c4f870365E785982E1f101E93b906; // 示例地址，请替换为实际地址
         
-        // 设置阈值和委员会总人数
+        // 设置阈值和最大委员会人数
         uint256 threshold = 2;
-        uint256 committeeTotal = 3;
+        uint256 maxCommitteeSize = 5;
         
         // 部署合约
-        dcAllocator = new DCAllocator(initialCommittee, threshold, committeeTotal);
+        dcAllocator = new DCAllocator(initialCommittee, threshold, maxCommitteeSize);
         
         // 设置保险库地址
         dcAllocator.setVault(0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65); // 示例地址，请替换为实际地址

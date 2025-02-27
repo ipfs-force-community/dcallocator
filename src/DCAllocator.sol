@@ -1,150 +1,211 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+/**
+ * @title DCAllocator
+ * @dev 一个基于多签委员会的质押与罚没管理合约
+ *
+ * 合约功能总结：
+ * 1. 质押管理：
+ *    - 用户可以对特定issue进行ETH质押
+ *    - 每个issue只能被质押一次，不支持在初始质押时追加
+ *    - 用户可以通过stakeMore函数增加对已有issue的质押金额，同时会重置质押时间
+ *    - 质押后需等待挑战期(默认180天)才能取回质押
+ *
+ * 2. 委员会管理：
+ *    - 合约由多签委员会成员共同管理
+ *    - 委员会成员可以对质押提出罚没提议
+ *    - 当罚没提议达到阈值时，质押将被罚没并转移到保险库
+ *    - 合约拥有者可以添加或移除委员会成员
+ *    - 委员会成员数量有上限(maxCommitteeSize)
+ *
+ * 3. 罚没机制：
+ *    - 委员会成员可以对质押发起罚没提议
+ *    - 当提议数量达到阈值时，质押将被罚没
+ *    - 被罚没的资金将转移到指定的保险库地址
+ *
+ * 4. 活跃问题管理：
+ *    - 合约维护一个活跃问题列表
+ *    - 当质押被取回或罚没时，相应的问题将从活跃列表中移除
+ *
+ * 安全特性：
+ * - 只有合约拥有者可以修改关键参数(挑战期、保险库地址)
+ * - 只有合约拥有者可以管理委员会成员
+ * - 委员会成员数量不能低于阈值，确保多签机制正常运行
+ * - 每个委员会成员对同一issue只能提交一次罚没提议
+ */
 
-//原生token质押到DCAllocator智能合约
-//阈值签名可以发起slash某个DC质押的token
-//具有slash权限的是多签地址
-//没有slash的情况下，质押用户可以unstak自己的token，判断条件：已经过了挑战时间
-//slash的会转到另外一个地址
+// 原生token质押到DCAllocator智能合约
+// 质押后需要等待一定时间才能取回
+// 如果在质押期间，委员会成员达到一定阈值认为该质押应该被slash的会转到另外一个地址
 
 contract DCAllocator{
-    //被slash的token会转移到这个地址
+    // 质押结构体，用于存储用户的质押信息
+    struct Stake { 
+        address user;        // 质押用户地址
+        uint256 amount;      // 质押金额
+        uint256 timestamp;   // 质押时间戳
+        bool isSlash;        // 是否已被罚没
+    }
+    // 被slash的token会转移到这个地址
     address public vault;
+    // 委员会成员地址数组，负责投票决定是否罚没质押
     address[] public multiSigCommittee;
-    //委员会阈值人数
+    // 阈值，决定多少委员会成员同意后才能执行罚没操作
     uint public threshold;
-    //委员会最大人数
+    // 委员会总人数，用于跟踪当前委员会的规模
     uint public committeeTotal;
 
-    //默认是合约部署者
-    address public owner;
-    //挑战期时长,默认180天，单位：day; onwer可以修改
-    uint256 public challengePeriod = 180 days;
+    // 委员会最大人数
+    uint public maxCommitteeSize;
 
-    //用户质押映射,key:用户地址,value:质押金额和质押时间
-    struct Stake { 
-        address user;
-        uint256 amount;
-        uint256 timestamp;
-        bool isSlash;
-    }
+    // 合约拥有者地址，默认为部署合约的地址
+    address public owner;
+    // 挑战期，默认为180天，用户必须等待这段时间后才能取回质押
+    uint256 public challengePeriod = 180 days;
+    // 质押映射，issue ID => Stake结构体
     mapping(uint => Stake) public stakes;
-    
     // 跟踪所有活跃的 issue
     uint[] public activeIssues;
+    // issue ID到数组索引的映射，用于O(1)时间复杂度查找和删除
+    // 记录每个issue在activeIssues数组中的位置
     mapping(uint => uint) public issueToIndex; // issue -> index in activeIssues
-
-    //key: issue, value: []address(committee member)
+    // 罚没提议映射，issue ID => 提议者地址数组
+    // 记录每个issue的所有罚没提议及提议者
     mapping(uint => address[]) public slashProposals;
 
+    // 质押事件，当用户进行质押时触发
     event Staked(uint issue, address indexed user, uint256 amount, uint256 timestamp);
+    // 取回质押事件，当用户成功取回质押时触发
     event Unstaked(uint issue, address indexed user, uint256 amount, uint256 timestamp);
-    event Slashed(uint issue, address indexed user, uint256 amount, uint256 timestamp, address[] validProposals);
+    // 罚没事件，当质押被成功罚没时触发，包含所有投票的委员会成员
+    event Slashed(uint issue, address indexed user, uint256 amount, uint256 timestamp, address[] committeeMembers);
+    // 添加罚没提议事件，当委员会成员添加罚没提议但未达到阈值时触发
     event eventAddSlashProposal(uint issue, address indexed user, uint256 amount, uint256 timestamp, address proposer);
+    // 增加质押金额事件，当用户对已有质押增加金额时触发
+    event StakedMore(uint issue, address indexed user, uint256 additionalAmount, uint256 newAmount, uint256 timestamp);
 
-    //谁部署的合约，谁就是owner
-    constructor(address[] memory _multiSigCommittee, uint256 _threshold, uint256 _committeeTotal) {
+    // 构造函数，初始化合约的基本参数
+    constructor(address[] memory _multiSigCommittee, uint256 _threshold, uint256 _maxCommitteeSize) {
         multiSigCommittee = _multiSigCommittee;
         threshold = _threshold;
-        committeeTotal = _committeeTotal;
+        committeeTotal = multiSigCommittee.length;
+        maxCommitteeSize = _maxCommitteeSize;
 
         owner = msg.sender;
     }
 
+    // 仅合约拥有者可调用的修饰符
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner can call this function");
         _;
     }
 
-    //设置挑战期期时长,单位：day
+    // 仅委员会成员可调用的修饰符
+    modifier onlyCommittee() {
+        bool isCommittee = false;
+        for (uint i = 0; i < multiSigCommittee.length; i++) {
+            if (multiSigCommittee[i] == msg.sender) {
+                isCommittee = true;
+                break;
+            }
+        }
+        require(isCommittee, "Only committee members can call this function");
+        _;
+    }
+
+    // 设置挑战期期时长，单位：天
+    // 只有合约拥有者可以调用
     function setChallengePeriod(uint256 _challengePeriod) public onlyOwner{
         challengePeriod = _challengePeriod;
     }
 
-    //质押原生代币到一个多签地址
+    // 质押函数，用户通过发送ETH来质押特定issue
+    // 每个issue只能被质押一次
     function stake(uint issue) public payable {
         require(msg.value > 0, "Amount must be greater than 0");
-        require(stakes[issue].user == address(0) || stakes[issue].user == msg.sender, 
-            "Issue already taken by another user");
+        require(stakes[issue].user == address(0), "Issue already staked");
 
-        if(stakes[issue].user == address(0)) {
-            stakes[issue] = Stake({
-                user: msg.sender,
-                amount: msg.value,
-                timestamp: block.timestamp,
-                isSlash: false
-            });
-            // 添加 issue 到 activeIssues
-            activeIssues.push(issue);
-            issueToIndex[issue] = activeIssues.length - 1;
-        } else {//如果质押到一个已经存在的issue号，但是address不一样，则会更新质押金额和时间
-            stakes[issue].amount += msg.value;
-            stakes[issue].timestamp = block.timestamp;
-        }
+        // 创建质押记录
+        stakes[issue] = Stake({
+            user: msg.sender,
+            amount: msg.value,
+            timestamp: block.timestamp,
+            isSlash: false
+        });
+
+        // 添加到活跃问题列表
+        issueToIndex[issue] = activeIssues.length;
+        activeIssues.push(issue);
 
         emit Staked(issue, msg.sender, msg.value, block.timestamp);
     }
 
-    //解质押，当质押时间超过challengePeriod，才可以调用此函数
+    // 增加质押金额函数，用户可以增加对已有issue的质押金额
+    function stakeMore(uint issue) public payable {
+        Stake storage targetStake = stakes[issue];
+        require(targetStake.user == msg.sender, "Not the staker");
+        require(!targetStake.isSlash, "Stake has been slashed");
+        require(msg.value > 0, "Amount must be greater than 0");
+
+        uint256 additionalAmount = msg.value;
+        uint256 newAmount = targetStake.amount + additionalAmount;
+        targetStake.amount = newAmount;
+        targetStake.timestamp = block.timestamp; // 更新质押时间戳
+
+        emit StakedMore(issue, msg.sender, additionalAmount, newAmount, block.timestamp);
+    }
+
+    // 取回质押函数，当质押时间超过挑战期后，用户可以取回质押
     function unstake(uint issue) public {
-        Stake storage userStake = stakes[issue];
-        require(userStake.user == msg.sender, "Not the stake owner");
-        require(!userStake.isSlash, "Stake has been slashed");
-        require(block.timestamp - userStake.timestamp >= challengePeriod, 
-            "Challenge period not over");
-
-        uint256 amount = userStake.amount;
-        delete stakes[issue]; // 直接删除整个质押记录
-        // 移除 issue 从 activeIssues
-        uint index = issueToIndex[issue];
-        activeIssues[index] = activeIssues[activeIssues.length - 1];
-        activeIssues.pop();
-        delete issueToIndex[issue];
-
+        Stake storage targetStake = stakes[issue];
+        require(targetStake.user == msg.sender, "Not the staker");
+        require(!targetStake.isSlash, "Stake has been slashed");
+        require(block.timestamp > targetStake.timestamp + challengePeriod, "Challenge period not over");
+        
+        uint256 amount = targetStake.amount;
+        targetStake.amount = 0;
+        targetStake.user = address(0);
+        
+        // 从activeIssues中移除
+        removeActiveIssue(issue);
+        
         payable(msg.sender).transfer(amount);
         emit Unstaked(issue, msg.sender, amount, block.timestamp);
     }
 
-    //slash某个地址的质押金额
-    function slash(uint issue) public {
-        // 确保调用者是委员会成员
-        require(isCommitteeMember(msg.sender), "Not a committee member");
-        
+    // 罚没函数，委员会成员可以调用此函数来提议罚没特定issue的质押
+    function slash(uint issue) public onlyCommittee {
+        // 确保质押存在
         Stake storage targetStake = stakes[issue];
         require(targetStake.user != address(0), "No stake found");
         require(!targetStake.isSlash, "Already slashed");
-
-        // 添加当前调用者的提议
+        
+        // 添加slash提议
         addSlashProposal(issue);
-
-        // 如果有效提议数量达到阈值，则执行 slash 操作
+        emit eventAddSlashProposal(issue, targetStake.user, targetStake.amount, targetStake.timestamp, msg.sender);
+        
+        // 检查是否达到阈值
         if (hasReachedThreshold(issue)) {
-            uint256 amount = targetStake.amount;
+            // 达到阈值，执行slash
             targetStake.isSlash = true;
+            uint256 amount = targetStake.amount;
             targetStake.amount = 0;
-
-            if(vault != address(0)) {
-                payable(vault).transfer(amount);
-            }
             
-            // 从 activeIssues 中移除该 issue
-            uint index = issueToIndex[issue];
-            activeIssues[index] = activeIssues[activeIssues.length - 1];
-            issueToIndex[activeIssues[activeIssues.length - 1]] = index;
-            activeIssues.pop();
-            delete issueToIndex[issue];
+            // 从activeIssues中移除
+            removeActiveIssue(issue);
             
-            // 触发Slashed事件
-            emit Slashed(issue, targetStake.user, amount, block.timestamp, slashProposals[issue]);
-        }else {
-            // 提议不足，返回提示信息
-            emit eventAddSlashProposal(issue, targetStake.user, targetStake.amount, block.timestamp, msg.sender);
+            // 将资金转移到保险库
+            payable(vault).transfer(amount);
+            
+            // 获取所有有效的提议
+            address[] memory validProposals = getSlashProposals(issue);
+            
+            emit Slashed(issue, targetStake.user, amount, block.timestamp, validProposals);
         }
     }
 
-    //设置vault地址，只有owner可以调用
+    // 设置保险库地址，只有合约拥有者可以调用
     function setVault(address _vault) public onlyOwner {
         require(_vault != address(0), "Vault address cannot be zero");
         vault = _vault;
@@ -160,13 +221,13 @@ contract DCAllocator{
         return false;
     }
 
-    //是否达成阈值
+    // 检查某个issue的罚没提议是否达到阈值
     function hasReachedThreshold(uint issue) public view returns (bool) {
-        Stake storage targetStake = stakes[issue];
-        return targetStake.amount >= threshold;
+        address[] storage proposals = slashProposals[issue];
+        return proposals.length >= threshold;
     }
 
-    // 委员会成员添加slash提议
+    // 委员会成员添加罚没提议的内部函数
     function addSlashProposal(uint issue) internal {
         Stake storage targetStake = stakes[issue];
         require(targetStake.user != address(0), "No stake found");
@@ -184,7 +245,7 @@ contract DCAllocator{
         slashProposals[issue].push(msg.sender);
     }
 
-    // 获取某个issue的所有slash提议
+    // 获取某个issue的所有罚没提议
     function getSlashProposals(uint issue) public view returns (address[] memory) {
         address[] storage proposals = slashProposals[issue];
         address[] memory proposers = new address[](proposals.length);
@@ -196,18 +257,16 @@ contract DCAllocator{
         return proposers;
     }
 
-    // 添加委员会成员
+    // 添加委员会成员，只有合约拥有者可以调用
     function addCommitteeMember(address _member) public onlyOwner(){
         require(!isCommitteeMember(_member), "Address is already a committee member");
-
-        if (multiSigCommittee.length == committeeTotal) {
-            revert("Cannot add more members: committee is full");
-        }
-
+        require(committeeTotal < maxCommitteeSize, "Committee total cannot exceed maximum size");
+        
         multiSigCommittee.push(_member);
+        committeeTotal++;
     }
     
-    // 移除委员会成员
+    // 移除委员会成员，只有合约拥有者可以调用
     function removeCommitteeMember(address _member) public onlyOwner(){
         require(isCommitteeMember(_member), "Address is not a committee member");
         require(committeeTotal > threshold, "Cannot remove member: would make threshold impossible to reach");
@@ -231,10 +290,9 @@ contract DCAllocator{
         updateSlashProposals(_member);
     }
     
-    // 更新所有 slashProposal，移除指定成员的提议
+    // 更新所有罚没提议，移除指定成员的提议
     function updateSlashProposals(address _member) internal {
-        // 这里需要遍历所有的 slashProposal
-        // 由于我们现在有一个数组来跟踪所有活跃的 issue
+        // 遍历所有活跃的issue，移除指定成员的提议
         for (uint i = 0; i < activeIssues.length; i++) {
             uint issue = activeIssues[i];
             address[] storage proposals = slashProposals[issue];
@@ -249,17 +307,18 @@ contract DCAllocator{
             }
         }
     }
-    
-    // 更新阈值
-    function updateThreshold(uint256 _threshold) public onlyOwner{
-        require(_threshold > 0, "Threshold must be greater than 0");
-        require(_threshold <= committeeTotal, "Threshold cannot exceed committee total");
-        
-        threshold = _threshold;
-    }
 
     // 获取活跃问题的数量
     function getActiveIssuesCount() public view returns (uint) {
         return activeIssues.length;
+    }
+
+    // 从活跃问题列表中移除指定issue的内部函数
+    function removeActiveIssue(uint issue) internal {
+        uint index = issueToIndex[issue];
+        activeIssues[index] = activeIssues[activeIssues.length - 1];
+        issueToIndex[activeIssues[activeIssues.length - 1]] = index;
+        activeIssues.pop();
+        delete issueToIndex[issue];
     }
 }

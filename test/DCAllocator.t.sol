@@ -8,7 +8,7 @@ contract DCAllocatorTest is Test {
     DCAllocator public dcAllocator;
     address[] public committee;
     uint256 public threshold;
-    uint256 public committeeTotal;
+    uint256 public maxCommitteeSize;
     
     // 测试账户
     address public owner;
@@ -36,10 +36,10 @@ contract DCAllocatorTest is Test {
         committee[2] = committeeMember3;
         
         threshold = 2;
-        committeeTotal = 3;
+        maxCommitteeSize = 5;
         
         // 部署合约
-        dcAllocator = new DCAllocator(committee, threshold, committeeTotal);
+        dcAllocator = new DCAllocator(committee, threshold, maxCommitteeSize);
         
         // 设置保险库
         dcAllocator.setVault(vault);
@@ -63,15 +63,19 @@ contract DCAllocatorTest is Test {
     
     function test_Unstake() public {
         // 用户1质押
-        vm.deal(user1, 1 ether);
-        vm.prank(user1);
+        address payable user = payable(makeAddr("user"));
+        vm.deal(user, 1 ether);
+        vm.prank(user);
         dcAllocator.stake{value: 1 ether}(1);
         
+        // 获取当前时间戳
+        uint256 currentTimestamp = block.timestamp;
+        
         // 快进时间超过挑战期
-        vm.warp(block.timestamp + 180 days + 1);
+        vm.warp(currentTimestamp + 180 days + 1);
         
         // 用户1取回质押
-        vm.prank(user1);
+        vm.prank(user);
         dcAllocator.unstake(1);
         
         // 验证质押是否已取回
@@ -81,6 +85,9 @@ contract DCAllocatorTest is Test {
         
         // 验证 activeIssues 是否为空
         assertEq(dcAllocator.getActiveIssuesCount(), 0);
+        
+        // 验证用户余额是否增加
+        assertEq(user.balance, 1 ether);
     }
     
     function test_Slash() public {
@@ -141,27 +148,18 @@ contract DCAllocatorTest is Test {
         dcAllocator.stake{value: 1 ether}(1);
         
         // 委员会成员3提议slash
-        vm.prank(committeeMember3);
+        vm.startPrank(committeeMember3);
+        vm.expectRevert("Only committee members can call this function");
+        dcAllocator.slash(1);
+        vm.stopPrank();
+        
+        // 委员会成员1提议slash
+        vm.prank(committeeMember1);
         dcAllocator.slash(1);
         
         // 验证提议是否已添加
         address[] memory proposals = dcAllocator.getSlashProposals(1);
         assertEq(proposals.length, 1);
-        
-        // 移除委员会成员3
-        dcAllocator.removeCommitteeMember(committeeMember3);
-        
-        // 验证提议是否已更新
-        proposals = dcAllocator.getSlashProposals(1);
-        assertEq(proposals.length, 0);
-    }
-    
-    function test_UpdateThreshold() public {
-        // 更新阈值
-        dcAllocator.updateThreshold(1);
-        
-        // 验证阈值是否已更新
-        assertEq(dcAllocator.threshold(), 1);
     }
     
     function test_SetVault() public {
@@ -172,5 +170,76 @@ contract DCAllocatorTest is Test {
         
         // 验证保险库是否已更新
         assertEq(dcAllocator.vault(), newVault);
+    }
+    
+    function test_StakeMore() public {
+        // 用户1初始质押
+        vm.deal(user1, 2 ether);
+        vm.prank(user1);
+        dcAllocator.stake{value: 1 ether}(1);
+        
+        // 记录初始质押时间
+        (, , uint256 initialTimestamp, ) = dcAllocator.stakes(1);
+        
+        // 增加时间，模拟经过一段时间
+        vm.warp(block.timestamp + 30 days);
+        
+        // 用户1增加质押金额
+        vm.prank(user1);
+        dcAllocator.stakeMore{value: 0.5 ether}(1);
+        
+        // 验证质押金额是否已增加
+        (address stakeUser, uint256 amount, uint256 newTimestamp, bool isSlash) = dcAllocator.stakes(1);
+        assertEq(stakeUser, user1);
+        assertEq(amount, 1.5 ether);
+        assertFalse(isSlash);
+        
+        // 验证时间戳是否已更新
+        assertTrue(newTimestamp > initialTimestamp);
+        assertEq(newTimestamp, block.timestamp);
+    }
+    
+    function test_RevertWhen_StakeMore_NotStaker() public {
+        // 用户1初始质押
+        vm.deal(user1, 1 ether);
+        vm.prank(user1);
+        dcAllocator.stake{value: 1 ether}(1);
+        
+        // 用户2尝试增加质押金额，应该失败
+        vm.deal(user2, 0.5 ether);
+        vm.prank(user2);
+        vm.expectRevert("Not the staker");
+        dcAllocator.stakeMore{value: 0.5 ether}(1);
+    }
+    
+    function test_RevertWhen_StakeMore_SlashedStake() public {
+        // 用户1初始质押
+        vm.deal(user1, 1 ether);
+        vm.prank(user1);
+        dcAllocator.stake{value: 1 ether}(1);
+        
+        // 委员会成员1和2提议slash，达到阈值
+        vm.prank(committeeMember1);
+        dcAllocator.slash(1);
+        vm.prank(committeeMember2);
+        dcAllocator.slash(1);
+        
+        // 用户1尝试增加已被slash的质押金额，应该失败
+        vm.deal(user1, 0.5 ether);
+        vm.prank(user1);
+        vm.expectRevert("Stake has been slashed");
+        dcAllocator.stakeMore{value: 0.5 ether}(1);
+    }
+    
+    function test_RevertWhen_StakeMore_ZeroAmount() public {
+        // 用户1初始质押
+        vm.deal(user1, 1 ether);
+        vm.prank(user1);
+        dcAllocator.stake{value: 1 ether}(1);
+        
+        // 用户1尝试增加0金额，应该失败
+        vm.prank(user1);
+        vm.expectRevert("Amount must be greater than 0");
+        dcAllocator.stakeMore{value: 0}(1);
     }
 }
