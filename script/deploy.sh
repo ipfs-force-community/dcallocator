@@ -7,7 +7,7 @@ set -e
 
 # 默认参数
 NETWORK="cali"
-DEFAULT_RPC_URL="https://filecoin-calibration.chainup.net/rpc/v1"
+DEFAULT_RPC_URL="https://api.calibration.node.glif.io/rpc/v1"
 COMMITTEE="0x3dBcFd9a5d0534c675f529Aa0006918e4a658033,0x5a15CcF478922873375468626a8c44ffEd981802,0x1D38DB15DC600Bd73898F651d83D83808f6131Dd"
 THRESHOLD=2
 MAX_COMMITTEE_SIZE=5
@@ -105,7 +105,25 @@ elif [ "$NETWORK" = "cali" ]; then
   fi
   # 使用默认RPC URL或环境变量中的RPC URL
   RPC_URL=${RPC_URL:-$DEFAULT_RPC_URL}
-  forge script script/Deploy.s.sol:DeployScript --rpc-url $RPC_URL --broadcast --private-key $PRIVATE_KEY --verify
+  echo "使用RPC URL: $RPC_URL"
+  
+  # 为Filecoin网络设置特定参数
+  # 首先获取对应的Filecoin地址
+  echo "获取Filecoin地址..."
+  SENDER_ADDR=$(cast wallet address --private-key "$PRIVATE_KEY")
+  echo "以太坊地址: $SENDER_ADDR"
+  
+  # 使用Filecoin特定参数
+  forge script script/Deploy.s.sol:DeployScript \
+    --rpc-url "$RPC_URL" \
+    --broadcast \
+    --private-key "$PRIVATE_KEY" \
+    --legacy \
+    --slow \
+    --gas-price 1000000000 \
+    --gas-limit 20000000 \
+    --skip-simulation \
+    -vvvv
 elif [ "$NETWORK" = "sepolia" ]; then
   # Sepolia测试网部署
   if [ -z "$PRIVATE_KEY" ]; then
@@ -137,7 +155,25 @@ elif [ "$NETWORK" = "filecoin" ]; then
   fi
   # 检查RPC URL，如果未设置则使用默认值
   RPC_URL=${RPC_URL:-"https://api.node.glif.io/rpc/v1"}
-  forge script script/Deploy.s.sol:DeployScript --rpc-url $RPC_URL --broadcast --private-key $PRIVATE_KEY --verify
+  echo "使用RPC URL: $RPC_URL"
+  
+  # 为Filecoin网络设置特定参数
+  # 首先获取对应的Filecoin地址
+  echo "获取Filecoin地址..."
+  SENDER_ADDR=$(cast wallet address --private-key "$PRIVATE_KEY")
+  echo "以太坊地址: $SENDER_ADDR"
+  
+  # 使用Filecoin特定参数
+  forge script script/Deploy.s.sol:DeployScript \
+    --rpc-url "$RPC_URL" \
+    --broadcast \
+    --private-key "$PRIVATE_KEY" \
+    --legacy \
+    --slow \
+    --gas-price 1000000000 \
+    --gas-limit 20000000 \
+    --skip-simulation \
+    -vvvv
 else
   echo "错误: 不支持的网络 '$NETWORK'"
   exit 1

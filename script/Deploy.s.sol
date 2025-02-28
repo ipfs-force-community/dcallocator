@@ -8,43 +8,54 @@ contract DeployScript is Script {
     DCAllocator public dcAllocator;
 
     // 从环境变量中读取配置
-    function getConfig() internal returns (
+    function getConfig() internal view returns (
         address[] memory committee,
         uint256 threshold,
         uint256 maxCommitteeSize,
         address vault,
         uint256 challengePeriod
     ) {
-        // 从环境变量中读取委员会成员地址
+        // 从环境变量获取委员会成员地址
         string memory committeeStr = vm.envOr("COMMITTEE", string(""));
-        string[] memory committeeAddrs = splitString(committeeStr, ",");
-        
-        committee = new address[](committeeAddrs.length);
-        for (uint i = 0; i < committeeAddrs.length; i++) {
-            committee[i] = parseAddr(committeeAddrs[i]);
+        if (bytes(committeeStr).length > 0) {
+            string[] memory committeeStrs = splitString(committeeStr, ",");
+            committee = new address[](committeeStrs.length);
+            for (uint i = 0; i < committeeStrs.length; i++) {
+                committee[i] = parseAddr(committeeStrs[i]);
+            }
+        } else {
+            // 默认委员会成员
+            committee = new address[](3);
+            committee[0] = 0x3dBcFd9a5d0534c675f529Aa0006918e4a658033;
+            committee[1] = 0x5a15CcF478922873375468626a8c44ffEd981802;
+            committee[2] = 0x1D38DB15DC600Bd73898F651d83D83808f6131Dd;
         }
+
+        // 验证配置
+        require(committee.length > 0, "Committee cannot be empty");
         
-        // 从环境变量中读取其他配置
+        // 从环境变量获取阈值
         threshold = vm.envOr("THRESHOLD", uint256(2));
-        maxCommitteeSize = vm.envOr("MAX_COMMITTEE_SIZE", uint256(5));
-        vault = vm.envOr("VAULT", address(0));
-        uint256 challengePeriodDays = vm.envOr("CHALLENGE_PERIOD", uint256(180));
-        challengePeriod = challengePeriodDays * 1 days;
+        require(threshold > 0 && threshold <= committee.length, "Invalid threshold");
         
-        // 打印配置信息
-        console.log("Deploying DCAllocator with the following configuration:");
-        console.log("Committee members:");
-        for (uint i = 0; i < committee.length; i++) {
-            console.log(committee[i]);
+        // 从环境变量获取最大委员会人数
+        maxCommitteeSize = vm.envOr("MAX_COMMITTEE_SIZE", uint256(5));
+        require(maxCommitteeSize >= committee.length, "Max committee size must be >= committee length");
+        
+        // 从环境变量获取保险库地址
+        string memory vaultStr = vm.envOr("VAULT", string(""));
+        if (bytes(vaultStr).length > 0) {
+            vault = parseAddr(vaultStr);
+        } else {
+            vault = address(0);
         }
-        console.log("Threshold:", threshold);
-        console.log("Max Committee Size:", maxCommitteeSize);
-        console.log("Vault:", vault);
-        console.log("Challenge Period (days):", challengePeriod / 1 days);
+        
+        // 从环境变量获取挑战期（天数）
+        uint256 challengePeriodDays = vm.envOr("CHALLENGE_PERIOD", uint256(180));
+        challengePeriod = challengePeriodDays;
     }
 
     function run() public {
-        // 获取配置
         (
             address[] memory committee,
             uint256 threshold,
@@ -53,28 +64,28 @@ contract DeployScript is Script {
             uint256 challengePeriod
         ) = getConfig();
         
-        // 验证配置
-        require(committee.length > 0, "Committee cannot be empty");
-        require(threshold > 0 && threshold <= committee.length, "Invalid threshold");
-        require(maxCommitteeSize >= committee.length, "Max committee size must be >= committee length");
+        console.log("Deploying DCAllocator with the following configuration:");
+        console.log("Committee members:");
+        for (uint i = 0; i < committee.length; i++) {
+            console.log(committee[i]);
+        }
+        console.log("Threshold:", threshold);
+        console.log("Max Committee Size:", maxCommitteeSize);
+        console.log("Vault:", vault);
+        console.log("Challenge Period (days):", challengePeriod);
         
         vm.startBroadcast();
-
-        // 部署合约
-        dcAllocator = new DCAllocator(committee, threshold, maxCommitteeSize);
         
-        // 设置保险库地址（如果提供）
-        if (vault != address(0)) {
-            dcAllocator.setVault(vault);
-        }
+        dcAllocator = new DCAllocator(
+            committee,
+            threshold,
+            maxCommitteeSize,
+            vault,
+            challengePeriod
+        );
         
-        // 设置挑战期（如果与默认值不同）
-        if (challengePeriod != 180 days) {
-            dcAllocator.setChallengePeriod(challengePeriod);
-        }
-
         console.log("DCAllocator deployed at:", address(dcAllocator));
-
+        
         vm.stopBroadcast();
     }
     

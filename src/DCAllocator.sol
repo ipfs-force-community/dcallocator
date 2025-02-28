@@ -91,11 +91,23 @@ contract DCAllocator {
     );
 
     // 构造函数，初始化合约的基本参数
-    constructor(address[] memory _multiSigCommittee, uint256 _threshold, uint256 _maxCommitteeSize) {
+    constructor(
+        address[] memory _multiSigCommittee, 
+        uint256 _threshold, 
+        uint256 _maxCommitteeSize,
+        address _vault,
+        uint256 _challengePeriod
+    ) {
         multiSigCommittee = _multiSigCommittee;
         threshold = _threshold;
         committeeTotal = multiSigCommittee.length;
         maxCommitteeSize = _maxCommitteeSize;
+        
+        // 直接设置保险库地址和挑战期
+        vault = _vault;
+        if (_challengePeriod > 0) {
+            challengePeriod = _challengePeriod * 1 days;
+        }
 
         owner = msg.sender;
     }

@@ -39,7 +39,7 @@ contract DCAllocatorTest is Test {
         maxCommitteeSize = 5;
 
         // 部署合约
-        dcAllocator = new DCAllocator(committee, threshold, maxCommitteeSize);
+        dcAllocator = new DCAllocator(committee, threshold, maxCommitteeSize, address(0), 180);
 
         // 设置保险库
         dcAllocator.setVault(vault);
