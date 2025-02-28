@@ -60,6 +60,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# 导出环境变量，供Forge脚本使用
+export COMMITTEE="$COMMITTEE"
+export THRESHOLD="$THRESHOLD"
+export MAX_COMMITTEE_SIZE="$MAX_COMMITTEE_SIZE"
+export VAULT="$VAULT"
+export CHALLENGE_PERIOD="$CHALLENGE_PERIOD"
+
 # 显示配置信息
 echo "部署配置:"
 echo "网络: $NETWORK"
