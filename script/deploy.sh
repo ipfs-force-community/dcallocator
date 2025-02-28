@@ -29,7 +29,7 @@ while [[ $# -gt 0 ]]; do
       THRESHOLD="$2"
       shift 2
       ;;
-    --max-committee-size)
+    --max-committee)
       MAX_COMMITTEE_SIZE="$2"
       shift 2
       ;;
@@ -41,18 +41,24 @@ while [[ $# -gt 0 ]]; do
       CHALLENGE_PERIOD="$2"
       shift 2
       ;;
+    --help)
+      echo "用法: ./deploy.sh [options]"
+      echo "选项:"
+      echo "  --network <network>         指定网络 (cali, mainnet, anvil, localhost)"
+      echo "  --committee <addresses>     委员会成员地址，用逗号分隔"
+      echo "  --threshold <number>        委员会阈值"
+      echo "  --max-committee <number>    最大委员会人数"
+      echo "  --vault <address>           保险库地址"
+      echo "  --challenge-period <days>   挑战期（天）"
+      echo "  --help                      显示帮助信息"
+      exit 0
+      ;;
     *)
-      echo "未知参数: $1"
+      echo "未知选项: $1"
       exit 1
       ;;
   esac
 done
-
-# 设置环境变量
-export COMMITTEE="$COMMITTEE"
-export THRESHOLD="$THRESHOLD"
-export MAX_COMMITTEE_SIZE="$MAX_COMMITTEE_SIZE"
-export VAULT="$VAULT"
 
 # 显示配置信息
 echo "部署配置:"
@@ -63,12 +69,14 @@ echo "最大委员会人数: $MAX_COMMITTEE_SIZE"
 echo "保险库地址: $VAULT"
 echo "挑战期 (天): $CHALLENGE_PERIOD"
 
-# 确认部署
-read -p "确认部署? (y/n): " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-  echo "部署已取消"
-  exit 0
+# 确认部署到主网
+if [ "$NETWORK" = "mainnet" ] || [ "$NETWORK" = "filecoin" ]; then
+  echo -n "你确定要部署到主网吗? [y/N] "
+  read confirm
+  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    echo "部署已取消"
+    exit 0
+  fi
 fi
 
 # 执行部署
@@ -76,17 +84,20 @@ echo "开始部署..."
 
 if [ "$NETWORK" = "anvil" ] || [ "$NETWORK" = "localhost" ]; then
   # 本地部署
-  forge script script/Deploy.s.sol:DeployScript --rpc-url http://localhost:8545 --broadcast --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+  if [ -z "$PRIVATE_KEY" ]; then
+    echo "错误: 部署到本地网络需要设置PRIVATE_KEY环境变量"
+    echo "可以使用anvil默认账户的私钥: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    exit 1
+  fi
+  forge script script/Deploy.s.sol:DeployScript --rpc-url http://localhost:8545 --broadcast --private-key $PRIVATE_KEY
 elif [ "$NETWORK" = "cali" ]; then
   # Filecoin Calibration测试网部署
   if [ -z "$PRIVATE_KEY" ]; then
     echo "错误: 部署到测试网需要设置PRIVATE_KEY环境变量"
     exit 1
   fi
-  
   # 使用默认RPC URL或环境变量中的RPC URL
   RPC_URL=${RPC_URL:-$DEFAULT_RPC_URL}
-  
   forge script script/Deploy.s.sol:DeployScript --rpc-url $RPC_URL --broadcast --private-key $PRIVATE_KEY --verify
 elif [ "$NETWORK" = "sepolia" ]; then
   # Sepolia测试网部署
@@ -105,21 +116,11 @@ elif [ "$NETWORK" = "mainnet" ]; then
     echo "错误: 部署到主网需要设置PRIVATE_KEY环境变量"
     exit 1
   fi
-  
   # 检查RPC URL
   if [ -z "$RPC_URL" ]; then
     echo "错误: 部署到主网需要设置RPC_URL环境变量"
     exit 1
   fi
-  
-  # 再次确认主网部署
-  echo "警告: 你正在部署到以太坊主网!"
-  read -p "确认主网部署? (输入 'CONFIRM' 确认): " -r
-  if [[ ! $REPLY = "CONFIRM" ]]; then
-    echo "主网部署已取消"
-    exit 0
-  fi
-  
   forge script script/Deploy.s.sol:DeployScript --rpc-url $RPC_URL --broadcast --private-key $PRIVATE_KEY --verify
 elif [ "$NETWORK" = "filecoin" ]; then
   # Filecoin主网部署
@@ -127,18 +128,8 @@ elif [ "$NETWORK" = "filecoin" ]; then
     echo "错误: 部署到Filecoin主网需要设置PRIVATE_KEY环境变量"
     exit 1
   fi
-  
   # 检查RPC URL，如果未设置则使用默认值
   RPC_URL=${RPC_URL:-"https://api.node.glif.io/rpc/v1"}
-  
-  # 再次确认主网部署
-  echo "警告: 你正在部署到Filecoin主网!"
-  read -p "确认Filecoin主网部署? (输入 'CONFIRM' 确认): " -r
-  if [[ ! $REPLY = "CONFIRM" ]]; then
-    echo "Filecoin主网部署已取消"
-    exit 0
-  fi
-  
   forge script script/Deploy.s.sol:DeployScript --rpc-url $RPC_URL --broadcast --private-key $PRIVATE_KEY --verify
 else
   echo "错误: 不支持的网络 '$NETWORK'"
