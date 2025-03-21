@@ -43,7 +43,11 @@ DCAllocator 是一个基于多签委员会的质押与罚没管理智能合约�
 
 ## 合约地址
 
-待部署后填写
+0xEC1a8315b5cF542BAA6601eE73008C65AA9b28F3
+
+访问一下地址进行操作，可以读写智能合约。
+
+https://calibration.filscan.io/address/0xEC1a8315b5cF542BAA6601eE73008C65AA9b28F3/#contract_verify
 
 ## 合约功能
 
