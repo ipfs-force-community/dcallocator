@@ -30,7 +30,7 @@
 - [事件](#事件)
 - [安全特性](#安全特性)
 - [使用示例](#使用示例)
-  - [质押 ETH](#质押-eth)
+  - [质押 FIL](#质押-fil)
   - [增加质押金额](#增加质押金额)
   - [取回质押](#取回质押)
   - [提议罚没](#提议罚没)
@@ -39,7 +39,7 @@
 
 ## 概述
 
-DCAllocator 是一个基于多签委员会的质押与罚没管理智能合约，用于管理用户对特定 issue 的 ETH 质押。合约支持质押管理、委员会管理、罚没机制和活跃问题管理等功能。
+DCAllocator 是一个基于多签委员会的质押与罚没管理智能合约，用于管理用户对特定 issue 的 FIL 质押。合约支持质押管理、委员会管理、罚没机制和活跃问题管理等功能。
 
 ## 合约地址
 
@@ -55,7 +55,7 @@ https://calibration.filscan.io/address/0xEC1a8315b5cF542BAA6601eE73008C65AA9b28F
 
 #### 1.1 质押 (stake)
 
-用户可以对特定 issue 进行 ETH 质押。
+用户可以对特定 issue 进行 FIL 质押。
 
 **函数签名:**
 ```solidity
@@ -308,17 +308,17 @@ struct Stake {
 
 ## 使用示例
 
-### 质押 ETH
+### 质押 FIL
 
 ```solidity
-// 质押 1 ETH 到 issue #123
+// 质押 1 FIL 到 issue #123
 dcallocator.stake{value: 1 ether}(123);
 ```
 
 ### 增加质押金额
 
 ```solidity
-// 为 issue #123 增加 0.5 ETH 的质押
+// 为 issue #123 增加 0.5 FIL 的质押
 dcallocator.stakeMore{value: 0.5 ether}(123);
 ```
 

@@ -1,13 +1,13 @@
 # DCAllocator
 
-DCAllocator是一个基于多签委员会的质押与罚没管理智能合约系统，用于管理用户对特定issue的ETH质押，并通过委员会多签机制实现对违规行为的罚没处理。
+DCAllocator是一个基于多签委员会的质押与罚没管理智能合约系统，用于管理用户对特定issue的FIL质押，并通过委员会多签机制实现对违规行为的罚没处理。
 
 ## 项目概述
 
 DCAllocator合约主要实现以下功能：
 
 1. **质押管理**：
-   - 用户可以对特定issue进行ETH质押
+   - 用户可以对特定issue进行FIL质押
    - 每个issue只能被质押一次，初始质押后可通过stakeMore函数增加质押金额
    - 质押后需等待挑战期(默认180天)才能取回质押
    - 增加质押金额会重置质押时间
@@ -77,7 +77,7 @@ $ forge script script/DCAllocator.s.sol:DCAllocatorScript --rpc-url <your_rpc_ur
 
 - **Forge**: 用于测试和编译合约
 - **Cast**: 用于与合约交互和发送交易
-- **Anvil**: 本地以太坊节点模拟
+- **Anvil**: 本地Filecoin节点模拟
 - **Chisel**: Solidity REPL工具
 
 ### 构建
