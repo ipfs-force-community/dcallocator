@@ -114,14 +114,15 @@ elif [ "$NETWORK" = "cali" ]; then
   echo "以太坊地址: $SENDER_ADDR"
   
   # 使用Filecoin特定参数
+  echo "设置gas费用为以太坊的500%..."
   forge script script/Deploy.s.sol:DeployScript \
     --rpc-url "$RPC_URL" \
     --broadcast \
     --private-key "$PRIVATE_KEY" \
     --legacy \
     --slow \
-    --gas-price 1000000000 \
-    --gas-limit 20000000 \
+    --gas-price 5000000000 \
+    --gas-limit 100000000 \
     --skip-simulation \
     -vvvv
 elif [ "$NETWORK" = "sepolia" ]; then

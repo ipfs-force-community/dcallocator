@@ -1,0 +1,12 @@
+{
+  "committee": [
+    "0x3dBcFd9a5d0534c675f529Aa0006918e4a658033",
+    "0x5a15CcF478922873375468626a8c44ffEd981802",
+    "0x1D38DB15DC600Bd73898F651d83D83808f6131Dd"
+  ],
+  "threshold": 2,
+  "maxCommitteeSize": 5,
+  "vault": "0xEb756AAef793125EeFD409Ef3Bb20787FBC25c10",
+  "challengePeriod": 180,
+  "contractAddress": "0xEC1a8315b5cF542BAA6601eE73008C65AA9b28F3"
+}
