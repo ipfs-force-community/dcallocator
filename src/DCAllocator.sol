@@ -33,6 +33,7 @@ pragma solidity ^0.8.24;
  * - 只有合约拥有者可以管理委员会成员
  * - 委员会成员数量不能低于阈值，确保多签机制正常运行
  * - 每个委员会成员对同一issue只能提交一次罚没提议
+ * - 使用重入锁防止重入攻击
  */
 
 // 原生token质押到DCAllocator智能合约
@@ -40,6 +41,17 @@ pragma solidity ^0.8.24;
 // 如果在质押期间，委员会成员达到一定阈值认为该质押应该被slash的会转到另外一个地址
 
 contract DCAllocator {
+    // 重入锁状态变量
+    bool private locked;
+
+    // 重入锁修饰符
+    modifier nonReentrant() {
+        require(!locked, "Reentrant call");
+        locked = true;
+        _;
+        locked = false;
+    }
+
     // 质押结构体，用于存储用户的质押信息
     struct Stake {
         address user; // 质押用户地址
@@ -169,25 +181,28 @@ contract DCAllocator {
     }
 
     // 取回质押函数，当质押时间超过挑战期后，用户可以取回质押
-    function unstake(uint256 issue) public {
+    function unstake(uint256 issue) public nonReentrant {
         Stake storage targetStake = stakes[issue];
         require(targetStake.user == msg.sender, "Not the staker");
         require(!targetStake.isSlash, "Stake has been slashed");
         require(block.timestamp > targetStake.timestamp + challengePeriod, "Challenge period not over");
 
         uint256 amount = targetStake.amount;
+        
+        // 先更新状态
         targetStake.amount = 0;
         targetStake.user = address(0);
-
-        // 从activeIssues中移除
         removeActiveIssue(issue);
 
-        payable(msg.sender).transfer(amount);
+        // 最后进行外部调用
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "Transfer failed");
+        
         emit Unstaked(issue, msg.sender, amount, block.timestamp);
     }
 
     // 罚没函数，委员会成员可以调用此函数来提议罚没特定issue的质押
-    function slash(uint256 issue) public onlyCommittee {
+    function slash(uint256 issue) public onlyCommittee nonReentrant {
         // 确保质押存在
         Stake storage targetStake = stakes[issue];
         require(targetStake.user != address(0), "No stake found");
@@ -200,18 +215,19 @@ contract DCAllocator {
         // 检查是否达到阈值
         if (hasReachedThreshold(issue)) {
             // 达到阈值，执行slash
-            targetStake.isSlash = true;
             uint256 amount = targetStake.amount;
+            
+            // 先更新状态
+            targetStake.isSlash = true;
             targetStake.amount = 0;
-
-            // 从activeIssues中移除
             removeActiveIssue(issue);
-
-            // 将资金转移到保险库
-            payable(vault).transfer(amount);
 
             // 获取所有有效的提议
             address[] memory validProposals = getSlashProposals(issue);
+
+            // 最后进行外部调用
+            (bool success, ) = payable(vault).call{value: amount}("");
+            require(success, "Transfer failed");
 
             emit Slashed(issue, targetStake.user, amount, block.timestamp, validProposals);
         }
