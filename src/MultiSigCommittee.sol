@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import "./Ownable.sol";
+
 /**
  * @title MultiSigCommittee
  * @dev 多重签名委员会管理基类
@@ -11,7 +13,7 @@ pragma solidity ^0.8.24;
  * - 阈值管理
  * - 委员会大小限制
  */
-contract MultiSigCommittee {
+contract MultiSigCommittee is Ownable {
     // 委员会成员地址数组
     address[] public multiSigCommittee;
     // 阈值，决定多少委员会成员同意后才能执行操作
@@ -20,8 +22,6 @@ contract MultiSigCommittee {
     uint256 public committeeTotal;
     // 委员会最大人数
     uint256 public maxCommitteeSize;
-    // 合约拥有者地址
-    address public owner;
 
     // 事件
     event CommitteeMemberAdded(address indexed member, uint256 newTotal);
@@ -39,7 +39,7 @@ contract MultiSigCommittee {
         address[] memory _multiSigCommittee, 
         uint256 _threshold, 
         uint256 _maxCommitteeSize
-    ) {
+    ) Ownable() {
         require(_multiSigCommittee.length > 0, "Committee cannot be empty");
         require(_threshold > 0 && _threshold <= _multiSigCommittee.length, "Invalid threshold");
         require(_maxCommitteeSize >= _multiSigCommittee.length, "Max size too small");
@@ -48,13 +48,6 @@ contract MultiSigCommittee {
         threshold = _threshold;
         committeeTotal = multiSigCommittee.length;
         maxCommitteeSize = _maxCommitteeSize;
-        owner = msg.sender;
-    }
-
-    // 仅合约拥有者可调用的修饰符
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner can call this function");
-        _;
     }
 
     // 仅委员会成员可调用的修饰符
@@ -150,15 +143,6 @@ contract MultiSigCommittee {
         uint256 oldSize = maxCommitteeSize;
         maxCommitteeSize = _maxCommitteeSize;
         emit MaxCommitteeSizeUpdated(oldSize, _maxCommitteeSize);
-    }
-
-    /**
-     * @dev 转移所有权
-     * @param _newOwner 新的拥有者地址
-     */
-    function transferOwnership(address _newOwner) public onlyOwner {
-        require(_newOwner != address(0), "New owner cannot be zero address");
-        owner = _newOwner;
     }
 
     /**
