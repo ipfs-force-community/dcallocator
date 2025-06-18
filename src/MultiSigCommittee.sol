@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "./Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title MultiSigCommittee
@@ -39,7 +39,7 @@ contract MultiSigCommittee is Ownable {
         address[] memory _multiSigCommittee, 
         uint256 _threshold, 
         uint256 _maxCommitteeSize
-    ) Ownable() {
+    ) Ownable(msg.sender) {
         require(_multiSigCommittee.length > 0, "Committee cannot be empty");
         require(_threshold > 0 && _threshold <= _multiSigCommittee.length, "Invalid threshold");
         require(_maxCommitteeSize >= _multiSigCommittee.length, "Max size too small");
