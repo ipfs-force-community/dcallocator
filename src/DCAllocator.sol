@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "./ReentrancyGuard.sol";
+import "./MultiSigCommittee.sol";
 
 /**
  * @title DCAllocator
@@ -42,7 +43,7 @@ import "./ReentrancyGuard.sol";
 // 质押后需要等待一定时间才能取回
 // 如果在质押期间，委员会成员达到一定阈值认为该质押应该被slash的会转到另外一个地址
 
-contract DCAllocator is ReentrancyGuard {
+contract DCAllocator is ReentrancyGuard, MultiSigCommittee {
     // 质押结构体，用于存储用户的质押信息
     struct Stake {
         address user; // 质押用户地址
@@ -53,18 +54,6 @@ contract DCAllocator is ReentrancyGuard {
     // 被slash的token会转移到这个地址
 
     address public vault;
-    // 委员会成员地址数组，负责投票决定是否罚没质押
-    address[] public multiSigCommittee;
-    // 阈值，决定多少委员会成员同意后才能执行罚没操作
-    uint256 public threshold;
-    // 委员会总人数，用于跟踪当前委员会的规模
-    uint256 public committeeTotal;
-
-    // 委员会最大人数
-    uint256 public maxCommitteeSize;
-
-    // 合约拥有者地址，默认为部署合约的地址
-    address public owner;
     // 挑战期，默认为180天，用户必须等待这段时间后才能取回质押
     uint256 public challengePeriod = 180 days;
     // 质押映射，issue ID => Stake结构体
@@ -100,38 +89,12 @@ contract DCAllocator is ReentrancyGuard {
         uint256 _maxCommitteeSize,
         address _vault,
         uint256 _challengePeriod
-    ) {
-        multiSigCommittee = _multiSigCommittee;
-        threshold = _threshold;
-        committeeTotal = multiSigCommittee.length;
-        maxCommitteeSize = _maxCommitteeSize;
-        
+    ) MultiSigCommittee(_multiSigCommittee, _threshold, _maxCommitteeSize) {
         // 直接设置保险库地址和挑战期
         vault = _vault;
         if (_challengePeriod > 0) {
             challengePeriod = _challengePeriod * 1 days;
         }
-
-        owner = msg.sender;
-    }
-
-    // 仅合约拥有者可调用的修饰符
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner can call this function");
-        _;
-    }
-
-    // 仅委员会成员可调用的修饰符
-    modifier onlyCommittee() {
-        bool isCommittee = false;
-        for (uint256 i = 0; i < multiSigCommittee.length; i++) {
-            if (multiSigCommittee[i] == msg.sender) {
-                isCommittee = true;
-                break;
-            }
-        }
-        require(isCommittee, "Only committee members can call this function");
-        _;
     }
 
     // 设置挑战期期时长，单位：天
@@ -204,7 +167,7 @@ contract DCAllocator is ReentrancyGuard {
         emit eventAddSlashProposal(issue, targetStake.user, targetStake.amount, targetStake.timestamp, msg.sender);
 
         // 检查是否达到阈值
-        if (hasReachedThreshold(issue)) {
+        if (hasReachedThreshold(slashProposals[issue].length)) {
             // 达到阈值，执行slash
             uint256 amount = targetStake.amount;
             
@@ -228,22 +191,6 @@ contract DCAllocator is ReentrancyGuard {
     function setVault(address _vault) public onlyOwner {
         require(_vault != address(0), "Vault address cannot be zero");
         vault = _vault;
-    }
-
-    // 检查地址是否是委员会成员
-    function isCommitteeMember(address _address) public view returns (bool) {
-        for (uint256 i = 0; i < committeeTotal; i++) {
-            if (multiSigCommittee[i] == _address) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // 检查某个issue的罚没提议是否达到阈值
-    function hasReachedThreshold(uint256 issue) public view returns (bool) {
-        address[] storage proposals = slashProposals[issue];
-        return proposals.length >= threshold;
     }
 
     // 委员会成员添加罚没提议的内部函数
@@ -276,35 +223,10 @@ contract DCAllocator is ReentrancyGuard {
         return proposers;
     }
 
-    // 添加委员会成员，只有合约拥有者可以调用
-    function addCommitteeMember(address _member) public onlyOwner {
-        require(!isCommitteeMember(_member), "Address is already a committee member");
-        require(committeeTotal < maxCommitteeSize, "Committee total cannot exceed maximum size");
-
-        multiSigCommittee.push(_member);
-        committeeTotal++;
-    }
-
-    // 移除委员会成员，只有合约拥有者可以调用
-    function removeCommitteeMember(address _member) public onlyOwner {
-        require(isCommitteeMember(_member), "Address is not a committee member");
-        require(committeeTotal > threshold, "Cannot remove member: would make threshold impossible to reach");
-
-        // 找到并移除成员
-        bool found = false;
-        for (uint256 i = 0; i < multiSigCommittee.length; i++) {
-            if (multiSigCommittee[i] == _member) {
-                // 将最后一个元素移到当前位置，然后删除最后一个元素
-                multiSigCommittee[i] = multiSigCommittee[multiSigCommittee.length - 1];
-                multiSigCommittee.pop();
-                found = true;
-                committeeTotal--;
-                break;
-            }
-        }
-
-        require(found, "Failed to remove member");
-
+    // 重写移除委员会成员函数，添加清理罚没提议的逻辑
+    function removeCommitteeMember(address _member) public override onlyOwner {
+        super.removeCommitteeMember(_member);
+        
         // 更新所有 slashProposal，移除该成员的提议
         updateSlashProposals(_member);
     }
