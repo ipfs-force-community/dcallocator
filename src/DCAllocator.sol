@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import "./ReentrancyGuard.sol";
+
 /**
  * @title DCAllocator
  * @dev 一个基于多签委员会的质押与罚没管理合约
@@ -40,18 +42,7 @@ pragma solidity ^0.8.24;
 // 质押后需要等待一定时间才能取回
 // 如果在质押期间，委员会成员达到一定阈值认为该质押应该被slash的会转到另外一个地址
 
-contract DCAllocator {
-    // 重入锁状态变量
-    bool private locked;
-
-    // 重入锁修饰符
-    modifier nonReentrant() {
-        require(!locked, "Reentrant call");
-        locked = true;
-        _;
-        locked = false;
-    }
-
+contract DCAllocator is ReentrancyGuard {
     // 质押结构体，用于存储用户的质押信息
     struct Stake {
         address user; // 质押用户地址
