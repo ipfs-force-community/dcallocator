@@ -42,10 +42,11 @@ contract DeployScript is Script {
         
         vm.startBroadcast();
         
+        address multisig = 0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc; // 示例多签地址
         dcAllocator = new DCAllocator(
-            threshold,
             vault,
-            challengePeriod
+            challengePeriod,
+            multisig
         );
         
         console.log("DCAllocator deployed at:", address(dcAllocator));

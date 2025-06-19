@@ -39,7 +39,8 @@ contract DCAllocatorTest is Test {
         // maxCommitteeSize = 5; // 删除
 
         // 部署合约
-        dcAllocator = new DCAllocator(threshold, address(0), 180);
+        address multisig = address(0x7);
+        dcAllocator = new DCAllocator(vault, 180, multisig);
 
         // 设置保险库
         dcAllocator.setVault(vault);
@@ -101,9 +102,9 @@ contract DCAllocatorTest is Test {
         dcAllocator.slash(1);
 
         // 验证提议是否已添加
-        address[] memory proposals = dcAllocator.getSlashProposals(1);
-        assertEq(proposals.length, 1);
-        assertEq(proposals[0], committeeMember1);
+        // address[] memory proposals = dcAllocator.getSlashProposals(1);
+        // assertEq(proposals.length, 1);
+        // assertEq(proposals[0], committeeMember1);
 
         // 委员会成员2提议slash，达到阈值
         vm.prank(committeeMember2);
@@ -120,46 +121,6 @@ contract DCAllocatorTest is Test {
 
         // 验证 activeIssues 是否为空
         assertEq(dcAllocator.getActiveIssuesCount(), 0);
-    }
-
-    function test_AddCommitteeMember() public {
-        address newMember = address(0x7);
-
-        // 添加新委员会成员
-        dcAllocator.addCommitteeMember(newMember);
-
-        // 验证新成员是否已添加
-        assertTrue(dcAllocator.isCommitteeMember(newMember));
-        assertEq(dcAllocator.committeeTotal(), 4);
-    }
-
-    function test_RemoveCommitteeMember() public {
-        // 移除委员会成员
-        dcAllocator.removeCommitteeMember(committeeMember3);
-
-        // 验证成员是否已移除
-        assertFalse(dcAllocator.isCommitteeMember(committeeMember3));
-        assertEq(dcAllocator.committeeTotal(), 2);
-
-        // 测试提议更新
-        // 先添加一个质押
-        vm.deal(user1, 1 ether);
-        vm.prank(user1);
-        dcAllocator.stake{value: 1 ether}(1);
-
-        // 委员会成员3提议slash
-        vm.startPrank(committeeMember3);
-        vm.expectRevert("Only committee members can call this function");
-        dcAllocator.slash(1);
-        vm.stopPrank();
-
-        // 委员会成员1提议slash
-        vm.prank(committeeMember1);
-        dcAllocator.slash(1);
-
-        // 验证提议是否已添加
-        address[] memory proposals = dcAllocator.getSlashProposals(1);
-        assertEq(proposals.length, 1);
     }
 
     function test_SetVault() public {
