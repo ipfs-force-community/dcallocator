@@ -90,6 +90,18 @@ contract DCAllocator is ReentrancyGuard, Ownable {
         challengePeriod = _challengePeriod;
     }
 
+        // 设置保险库地址，只有合约拥有者可以调用
+    function setVault(address _vault) public onlyOwner {
+        require(_vault != address(0), "Vault address cannot be zero");
+        vault = _vault;
+    }
+
+    // 新增设置多签地址的方法
+    function setMultisig(address _multisig) public onlyOwner {
+        require(_multisig != address(0), "Multisig address cannot be zero");
+        multisig = _multisig;
+    }
+
     // 质押函数，用户通过发送ETH来质押特定issue
     // 每个issue只能被质押一次
     function stake(uint256 issue) public payable {
@@ -162,18 +174,6 @@ contract DCAllocator is ReentrancyGuard, Ownable {
         address[] memory committeeMembers = new address[](1);
         committeeMembers[0] = msg.sender;
         emit Slashed(issue, targetStake.user, amount, block.timestamp, committeeMembers);
-    }
-
-    // 设置保险库地址，只有合约拥有者可以调用
-    function setVault(address _vault) public onlyOwner {
-        require(_vault != address(0), "Vault address cannot be zero");
-        vault = _vault;
-    }
-
-    // 新增设置多签地址的方法
-    function setMultisig(address _multisig) public onlyOwner {
-        require(_multisig != address(0), "Multisig address cannot be zero");
-        multisig = _multisig;
     }
 
     // 获取活跃问题的数量
