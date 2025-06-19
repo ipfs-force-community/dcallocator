@@ -36,10 +36,10 @@ contract DCAllocatorTest is Test {
         committee[2] = committeeMember3;
 
         threshold = 2;
-        maxCommitteeSize = 5;
+        // maxCommitteeSize = 5; // 删除
 
         // 部署合约
-        dcAllocator = new DCAllocator(committee, threshold, maxCommitteeSize, address(0), 180);
+        dcAllocator = new DCAllocator(threshold, address(0), 180);
 
         // 设置保险库
         dcAllocator.setVault(vault);

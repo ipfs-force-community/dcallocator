@@ -9,39 +9,13 @@ contract DeployScript is Script {
 
     // 从环境变量中读取配置
     function getConfig() internal view returns (
-        address[] memory committee,
         uint256 threshold,
-        uint256 maxCommitteeSize,
         address vault,
         uint256 challengePeriod
     ) {
-        // 从环境变量获取委员会成员地址
-        string memory committeeStr = vm.envOr("COMMITTEE", string(""));
-        if (bytes(committeeStr).length > 0) {
-            string[] memory committeeStrs = splitString(committeeStr, ",");
-            committee = new address[](committeeStrs.length);
-            for (uint i = 0; i < committeeStrs.length; i++) {
-                committee[i] = parseAddr(committeeStrs[i]);
-            }
-        } else {
-            // 默认委员会成员
-            committee = new address[](3);
-            committee[0] = 0x3dBcFd9a5d0534c675f529Aa0006918e4a658033;
-            committee[1] = 0x5a15CcF478922873375468626a8c44ffEd981802;
-            committee[2] = 0x1D38DB15DC600Bd73898F651d83D83808f6131Dd;
-        }
-
-        // 验证配置
-        require(committee.length > 0, "Committee cannot be empty");
-        
         // 从环境变量获取阈值
         threshold = vm.envOr("THRESHOLD", uint256(2));
-        require(threshold > 0 && threshold <= committee.length, "Invalid threshold");
-        
-        // 从环境变量获取最大委员会人数
-        maxCommitteeSize = vm.envOr("MAX_COMMITTEE_SIZE", uint256(5));
-        require(maxCommitteeSize >= committee.length, "Max committee size must be >= committee length");
-        
+        require(threshold > 0, "Invalid threshold");
         // 从环境变量获取保险库地址
         string memory vaultStr = vm.envOr("VAULT", string(""));
         if (bytes(vaultStr).length > 0) {
@@ -49,7 +23,6 @@ contract DeployScript is Script {
         } else {
             vault = address(0);
         }
-        
         // 从环境变量获取挑战期（天数）
         uint256 challengePeriodDays = vm.envOr("CHALLENGE_PERIOD", uint256(180));
         challengePeriod = challengePeriodDays;
@@ -57,29 +30,20 @@ contract DeployScript is Script {
 
     function run() public {
         (
-            address[] memory committee,
             uint256 threshold,
-            uint256 maxCommitteeSize,
             address vault,
             uint256 challengePeriod
         ) = getConfig();
         
         console.log("Deploying DCAllocator with the following configuration:");
-        console.log("Committee members:");
-        for (uint i = 0; i < committee.length; i++) {
-            console.log(committee[i]);
-        }
         console.log("Threshold:", threshold);
-        console.log("Max Committee Size:", maxCommitteeSize);
         console.log("Vault:", vault);
         console.log("Challenge Period (days):", challengePeriod);
         
         vm.startBroadcast();
         
         dcAllocator = new DCAllocator(
-            committee,
             threshold,
-            maxCommitteeSize,
             vault,
             challengePeriod
         );

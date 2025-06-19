@@ -84,12 +84,10 @@ contract DCAllocator is ReentrancyGuard, MultiSigCommittee {
 
     // 构造函数，初始化合约的基本参数
     constructor(
-        address[] memory _multiSigCommittee, 
         uint256 _threshold, 
-        uint256 _maxCommitteeSize,
         address _vault,
         uint256 _challengePeriod
-    ) MultiSigCommittee(_multiSigCommittee, _threshold, _maxCommitteeSize) {
+    ) MultiSigCommittee(_threshold) {
         // 直接设置保险库地址和挑战期
         vault = _vault;
         if (_challengePeriod > 0) {

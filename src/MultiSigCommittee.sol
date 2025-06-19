@@ -20,34 +20,22 @@ contract MultiSigCommittee is Ownable {
     uint256 public threshold;
     // 委员会总人数，用于跟踪当前委员会的规模
     uint256 public committeeTotal;
-    // 委员会最大人数
-    uint256 public maxCommitteeSize;
 
     // 事件
     event CommitteeMemberAdded(address indexed member, uint256 newTotal);
     event CommitteeMemberRemoved(address indexed member, uint256 newTotal);
     event ThresholdUpdated(uint256 oldThreshold, uint256 newThreshold);
-    event MaxCommitteeSizeUpdated(uint256 oldSize, uint256 newSize);
 
     /**
      * @dev 构造函数
-     * @param _multiSigCommittee 初始委员会成员数组
      * @param _threshold 阈值
-     * @param _maxCommitteeSize 最大委员会人数
      */
     constructor(
-        address[] memory _multiSigCommittee, 
-        uint256 _threshold, 
-        uint256 _maxCommitteeSize
+        uint256 _threshold
     ) Ownable(msg.sender) {
-        require(_multiSigCommittee.length > 0, "Committee cannot be empty");
-        require(_threshold > 0 && _threshold <= _multiSigCommittee.length, "Invalid threshold");
-        require(_maxCommitteeSize >= _multiSigCommittee.length, "Max size too small");
-
-        multiSigCommittee = _multiSigCommittee;
+        require(_threshold > 0, "Invalid threshold");
         threshold = _threshold;
-        committeeTotal = multiSigCommittee.length;
-        maxCommitteeSize = _maxCommitteeSize;
+        committeeTotal = 0;
     }
 
     // 仅委员会成员可调用的修饰符
@@ -89,7 +77,6 @@ contract MultiSigCommittee is Ownable {
     function addCommitteeMember(address _member) public onlyOwner {
         require(_member != address(0), "Invalid member address");
         require(!isCommitteeMember(_member), "Address is already a committee member");
-        require(committeeTotal < maxCommitteeSize, "Committee total cannot exceed maximum size");
 
         multiSigCommittee.push(_member);
         committeeTotal++;
@@ -103,7 +90,7 @@ contract MultiSigCommittee is Ownable {
      */
     function removeCommitteeMember(address _member) public virtual onlyOwner {
         require(isCommitteeMember(_member), "Address is not a committee member");
-        require(committeeTotal > threshold, "Cannot remove member: would make threshold impossible to reach");
+        require(committeeTotal - 1 >= threshold, "Cannot remove member: would make threshold impossible to reach");
 
         // 找到并移除成员
         bool found = false;
@@ -132,17 +119,6 @@ contract MultiSigCommittee is Ownable {
         uint256 oldThreshold = threshold;
         threshold = _threshold;
         emit ThresholdUpdated(oldThreshold, _threshold);
-    }
-
-    /**
-     * @dev 设置最大委员会人数
-     * @param _maxCommitteeSize 新的最大人数
-     */
-    function setMaxCommitteeSize(uint256 _maxCommitteeSize) public onlyOwner {
-        require(_maxCommitteeSize >= committeeTotal, "Max size cannot be less than current total");
-        uint256 oldSize = maxCommitteeSize;
-        maxCommitteeSize = _maxCommitteeSize;
-        emit MaxCommitteeSizeUpdated(oldSize, _maxCommitteeSize);
     }
 
     /**
