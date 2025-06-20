@@ -9,19 +9,18 @@
     - [1.1 质押 (stake)](#11-质押-stake)
     - [1.2 增加质押金额 (stakeMore)](#12-增加质押金额-stakemore)
     - [1.3 取回质押 (unstake)](#13-取回质押-unstake)
-  - [2. 委员会管理](#2-委员会管理)
-    - [2.1 添加委员会成员 (addCommitteeMember)](#21-添加委员会成员-addcommitteemember)
-    - [2.2 移除委员会成员 (removeCommitteeMember)](#22-移除委员会成员-removecommitteemember)
-    - [2.3 检查是否为委员会成员 (isCommitteeMember)](#23-检查是否为委员会成员-iscommitteemember)
-  - [3. 罚没机制](#3-罚没机制)
-    - [3.1 罚没提议 (slash)](#31-罚没提议-slash)
-    - [3.2 检查是否达到罚没阈值 (hasReachedThreshold)](#32-检查是否达到罚没阈值-hasreachedthreshold)
-    - [3.3 获取罚没提议 (getSlashProposals)](#33-获取罚没提议-getslashproposals)
-  - [4. 活跃问题管理](#4-活跃问题管理)
+  - [2. 罚没机制](#2-罚没机制)
+    - [2.1 直接罚没 (slash)](#21-直接罚没-slash)
+  - [3. 合约配置](#3-合约配置)
+    - [3.1 设置挑战期 (setChallengePeriod)](#31-设置挑战期-setchallengeperiod)
+    - [3.2 设置保险库地址 (setVault)](#32-设置保险库地址-setvault)
+    - [3.3 设置多签地址 (setCommitteeMultisig)](#33-设置多签地址-setcommitteemultisig)
+    - [3.4 迁移owner权限 (transferOwnership)](#34-迁移owner权限-transferownership)
+  - [4. 查询接口](#4-查询接口)
     - [4.1 获取活跃问题数量 (getActiveIssuesCount)](#41-获取活跃问题数量-getactiveissuescount)
-  - [5. 合约配置](#5-合约配置)
-    - [5.1 设置挑战期 (setChallengePeriod)](#51-设置挑战期-setchallengeperiod)
-    - [5.2 设置保险库地址 (setVault)](#52-设置保险库地址-setvault)
+    - [4.2 获取所有活跃质押 (getAllActiveStakes)](#42-获取所有活跃质押-getallactivestakes)
+    - [4.3 获取所有历史质押 (getAllStakes)](#43-获取所有历史质押-getallstakes)
+    - [4.4 分页获取历史质押 (getAllStakesPaged)](#44-分页获取历史质押-getallstakespaged)
 - [状态变量](#状态变量)
   - [公共变量](#公共变量)
   - [映射](#映射)
@@ -33,21 +32,17 @@
   - [质押 FIL](#质押-fil)
   - [增加质押金额](#增加质押金额)
   - [取回质押](#取回质押)
-  - [提议罚没](#提议罚没)
+  - [直接罚没](#直接罚没)
 - [部署参数](#部署参数)
 - [注意事项](#注意事项)
 
 ## 概述
 
-DCAllocator 是一个基于多签委员会的质押与罚没管理智能合约，用于管理用户对特定 issue 的 FIL 质押。合约支持质押管理、委员会管理、罚没机制和活跃问题管理等功能。
+DCAllocator 是一个基于多签地址的质押与罚没管理智能合约，用于管理用户对特定 issue 的 FIL 质押。合约支持质押管理、多签地址管理、罚没机制和活跃/历史质押管理等功能。
 
 ## 合约地址
 
-0xEC1a8315b5cF542BAA6601eE73008C65AA9b28F3
-
-访问一下地址进行操作，可以读写智能合约。
-
-https://calibration.filscan.io/address/0xEC1a8315b5cF542BAA6601eE73008C65AA9b28F3/#contract_verify
+（请替换为实际部署地址）
 
 ## 合约功能
 
@@ -66,7 +61,8 @@ function stake(uint256 issue) public payable
 - `issue`: issue 的唯一标识符
 
 **要求:**
-- 质押金额必须大于 0
+- 质押金额必须大于等于 0.0001 ETH
+- 不能超过 100 ETH
 - 指定的 issue 尚未被质押
 
 **事件:**
@@ -87,7 +83,7 @@ function stakeMore(uint256 issue) public payable
 **要求:**
 - 调用者必须是原始质押者
 - 质押未被罚没
-- 增加的金额必须大于 0
+- 增加的金额必须大于等于 0.0001 ETH，且不超过 100 ETH
 
 **事件:**
 - `StakedMore(uint256 issue, address indexed user, uint256 additionalAmount, uint256 newAmount, uint256 timestamp)`
@@ -112,127 +108,31 @@ function unstake(uint256 issue) public
 **事件:**
 - `Unstaked(uint256 issue, address indexed user, uint256 amount, uint256 timestamp)`
 
-### 2. 委员会管理
+### 2. 罚没机制
 
-#### 2.1 添加委员会成员 (addCommitteeMember)
+#### 2.1 直接罚没 (slash)
 
-添加新的委员会成员，仅合约拥有者可调用。
-
-**函数签名:**
-```solidity
-function addCommitteeMember(address _member) public onlyOwner
-```
-
-**参数:**
-- `_member`: 要添加的委员会成员地址
-
-**要求:**
-- 指定地址不是现有委员会成员
-- 委员会成员数量未达到上限
-
-#### 2.2 移除委员会成员 (removeCommitteeMember)
-
-移除现有委员会成员，仅合约拥有者可调用。
+只有多签地址（committeeMultisig）可以直接对质押执行罚没。
 
 **函数签名:**
 ```solidity
-function removeCommitteeMember(address _member) public onlyOwner
-```
-
-**参数:**
-- `_member`: 要移除的委员会成员地址
-
-**要求:**
-- 指定地址是现有委员会成员
-- 移除后委员会成员数量不能低于阈值
-
-#### 2.3 检查是否为委员会成员 (isCommitteeMember)
-
-检查指定地址是否为委员会成员。
-
-**函数签名:**
-```solidity
-function isCommitteeMember(address _address) public view returns (bool)
-```
-
-**参数:**
-- `_address`: 要检查的地址
-
-**返回值:**
-- `bool`: 如果是委员会成员则返回 true，否则返回 false
-
-### 3. 罚没机制
-
-#### 3.1 罚没提议 (slash)
-
-委员会成员可以对质押发起罚没提议。
-
-**函数签名:**
-```solidity
-function slash(uint256 issue) public onlyCommittee
+function slash(uint256 issue, string memory reason) public
 ```
 
 **参数:**
 - `issue`: 要罚没的 issue 标识符
+- `reason`: 罚没理由
 
 **要求:**
-- 调用者必须是委员会成员
-- 指定的 issue 必须已被质押
-- 质押尚未被罚没
+- 调用者必须是 committeeMultisig
+- 指定的 issue 必须已被质押且未被罚没
 
 **事件:**
-- `eventAddSlashProposal(uint256 issue, address indexed user, uint256 amount, uint256 timestamp, address proposer)`
-- 当达到阈值时: `Slashed(uint256 issue, address indexed user, uint256 amount, uint256 timestamp, address[] committeeMembers)`
+- `Slashed(uint256 issue, address indexed user, uint256 amount, uint256 timestamp, address committeeMultisig, string reason)`
 
-#### 3.2 检查是否达到罚没阈值 (hasReachedThreshold)
+### 3. 合约配置
 
-检查某个 issue 的罚没提议是否达到阈值。
-
-**函数签名:**
-```solidity
-function hasReachedThreshold(uint256 issue) public view returns (bool)
-```
-
-**参数:**
-- `issue`: 要检查的 issue 标识符
-
-**返回值:**
-- `bool`: 如果达到阈值则返回 true，否则返回 false
-
-#### 3.3 获取罚没提议 (getSlashProposals)
-
-获取某个 issue 的所有罚没提议。
-
-**函数签名:**
-```solidity
-function getSlashProposals(uint256 issue) public view returns (address[] memory)
-```
-
-**参数:**
-- `issue`: 要查询的 issue 标识符
-
-**返回值:**
-- `address[] memory`: 提议罚没的委员会成员地址数组
-
-### 4. 活跃问题管理
-
-#### 4.1 获取活跃问题数量 (getActiveIssuesCount)
-
-获取当前活跃问题的数量。
-
-**函数签名:**
-```solidity
-function getActiveIssuesCount() public view returns (uint256)
-```
-
-**返回值:**
-- `uint256`: 活跃问题的数量
-
-### 5. 合约配置
-
-#### 5.1 设置挑战期 (setChallengePeriod)
-
-设置质押的挑战期时长，仅合约拥有者可调用。
+#### 3.1 设置挑战期 (setChallengePeriod)
 
 **函数签名:**
 ```solidity
@@ -242,9 +142,7 @@ function setChallengePeriod(uint256 _challengePeriod) public onlyOwner
 **参数:**
 - `_challengePeriod`: 新的挑战期时长（单位：天）
 
-#### 5.2 设置保险库地址 (setVault)
-
-设置被罚没资金转移的目标地址，仅合约拥有者可调用。
+#### 3.2 设置保险库地址 (setVault)
 
 **函数签名:**
 ```solidity
@@ -257,24 +155,90 @@ function setVault(address _vault) public onlyOwner
 **要求:**
 - 新地址不能为零地址
 
+#### 3.3 设置多签地址 (setCommitteeMultisig)
+
+**函数签名:**
+```solidity
+function setCommitteeMultisig(address _committeeMultisig) public onlyOwner
+```
+
+**参数:**
+- `_committeeMultisig`: 新的多签地址
+
+**要求:**
+- 新地址不能为零地址
+
+#### 3.4 迁移owner权限 (transferOwnership)
+
+**函数签名:**
+```solidity
+function transferOwnership(address newOwner) public onlyOwner
+```
+
+**参数:**
+- `newOwner`: 新的owner地址，不能为零地址
+
+**说明:**
+- 只有当前owner可调用，迁移后只有新owner可再管理合约
+
+### 4. 查询接口
+
+#### 4.1 获取活跃问题数量 (getActiveIssuesCount)
+
+**函数签名:**
+```solidity
+function getActiveIssuesCount() public view returns (uint256)
+```
+
+**返回值:**
+- `uint256`: 活跃问题的数量
+
+#### 4.2 获取所有活跃质押 (getAllActiveStakes)
+
+**函数签名:**
+```solidity
+function getAllActiveStakes() public view returns (Stake[] memory)
+```
+
+**返回值:**
+- `Stake[]`: 当前所有活跃质押的详细信息
+
+#### 4.3 获取所有历史质押 (getAllStakes)
+
+**函数签名:**
+```solidity
+function getAllStakes() public view returns (Stake[] memory)
+```
+
+**返回值:**
+- `Stake[]`: 所有历史质押（包括已结束和被罚没）的详细信息
+
+#### 4.4 分页获取历史质押 (getAllStakesPaged)
+
+**函数签名:**
+```solidity
+function getAllStakesPaged(uint256 offset, uint256 limit) public view returns (Stake[] memory)
+```
+
+**参数:**
+- `offset`: 起始下标
+- `limit`: 返回数量
+
+**返回值:**
+- `Stake[]`: 指定区间的历史质押信息
+
 ## 状态变量
 
 ### 公共变量
 
 - `vault`: 保险库地址，被罚没的资金将转移到此地址
-- `multiSigCommittee`: 委员会成员地址数组
-- `threshold`: 罚没阈值，决定多少委员会成员同意后才能执行罚没操作
-- `committeeTotal`: 当前委员会成员总数
-- `maxCommitteeSize`: 委员会最大人数
+- `committeeMultisig`: 多签地址，只有该地址可以执行罚没
 - `owner`: 合约拥有者地址
 - `challengePeriod`: 挑战期时长，默认为180天
 - `activeIssues`: 活跃问题列表
-
-### 映射
-
+- `allIssues`: 所有出现过的 issue 列表
 - `stakes`: issue ID => Stake 结构体，存储质押信息
 - `issueToIndex`: issue ID => 数组索引，用于快速查找和删除活跃问题
-- `slashProposals`: issue ID => 提议者地址数组，记录每个 issue 的罚没提议
 
 ## 数据结构
 
@@ -293,18 +257,17 @@ struct Stake {
 
 - `Staked(uint256 issue, address indexed user, uint256 amount, uint256 timestamp)`: 质押事件
 - `Unstaked(uint256 issue, address indexed user, uint256 amount, uint256 timestamp)`: 取回质押事件
-- `Slashed(uint256 issue, address indexed user, uint256 amount, uint256 timestamp, address[] committeeMembers)`: 罚没事件
-- `eventAddSlashProposal(uint256 issue, address indexed user, uint256 amount, uint256 timestamp, address proposer)`: 添加罚没提议事件
+- `Slashed(uint256 issue, address indexed user, uint256 amount, uint256 timestamp, address committeeMultisig, string reason)`: 罚没事件
 - `StakedMore(uint256 issue, address indexed user, uint256 additionalAmount, uint256 newAmount, uint256 timestamp)`: 增加质押金额事件
 
 ## 安全特性
 
-- 只有合约拥有者可以修改关键参数（挑战期、保险库地址）
-- 只有合约拥有者可以管理委员会成员
-- 委员会成员数量不能低于阈值，确保多签机制正常运行
-- 每个委员会成员对同一 issue 只能提交一次罚没提议
+- 只有合约拥有者可以修改关键参数（挑战期、保险库地址、多签地址）
+- 只有多签地址可以执行罚没
 - 质押后需等待挑战期才能取回质押
 - 被罚没的资金将转移到指定的保险库地址
+- 使用重入锁防止重入攻击
+- owner权限可通过transferOwnership(address newOwner)迁移，迁移后只有新owner可再管理合约
 
 ## 使用示例
 
@@ -329,28 +292,26 @@ dcallocator.stakeMore{value: 0.5 ether}(123);
 dcallocator.unstake(123);
 ```
 
-### 提议罚没
+### 直接罚没
 
 ```solidity
-// 委员会成员提议罚没 issue #123 的质押
-dcallocator.slash(123);
+// 多签地址直接罚没 issue #123 的质押
+dcallocator.slash(123, "违规原因");
 ```
 
 ## 部署参数
 
 部署合约时需要提供以下参数：
 
-1. `_multiSigCommittee`: 初始委员会成员地址数组
-2. `_threshold`: 罚没阈值
-3. `_maxCommitteeSize`: 委员会最大人数
-4. `_vault`: 保险库地址
-5. `_challengePeriod`: 挑战期时长（单位：天）
+1. `_vault`: 保险库地址
+2. `_challengePeriod`: 挑战期时长（单位：天）
+3. `_committeeMultisig`: 多签地址
 
 ## 注意事项
 
 1. 质押后需等待挑战期（默认180天）才能取回质押
 2. 每个 issue 只能被质押一次，但可以通过 `stakeMore` 函数增加质押金额
 3. 增加质押金额会重置质押时间
-4. 委员会成员对同一 issue 只能提交一次罚没提议
-5. 当罚没提议达到阈值时，质押将被罚没并转移到保险库
-6. 被罚没的质押无法取回
+4. 只有多签地址可以直接罚没质押
+5. 被罚没的质押无法取回
+6. 建议分页查询历史质押，避免gas超限
