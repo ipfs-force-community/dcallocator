@@ -35,22 +35,25 @@ DCAllocator合约主要实现以下功能：
 
 ### 部署
 
-使用Foundry部署DCAllocator合约：
+推荐使用一键部署脚本：
 
 ```shell
-$ forge script script/DCAllocator.s.sol:DCAllocatorScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+# 先设置私钥和（可选）自定义RPC
+export PRIVATE_KEY=你的私钥
+# export RPC_URL=自定义RPC（可选）
+
+# 部署到本地anvil
+./script/deploy.sh anvil
+# 部署到Filecoin Calibration测试网
+./script/deploy.sh cali
+# 部署到Filecoin主网
+./script/deploy.sh mainnet
 ```
 
-或使用一键部署脚本：
+- 脚本会根据网络自动选择默认RPC（如未设置RPC_URL环境变量）。
+- 只需设置PRIVATE_KEY，其他参数按需在合约部署后通过set函数配置。
 
-```shell
-$ ./script/deploy.sh --network <network> --vault <vault_address> --challenge-period <days>
-```
-
-部署时需要指定以下参数：
-- 保险库地址（vault）
-- 挑战期（天数，challenge-period）
-- 委员会多签地址（可在合约部署后通过setCommitteeMultisig设置）
+如需自定义RPC节点，可提前设置 `RPC_URL` 环境变量。
 
 ### 主要功能接口
 
