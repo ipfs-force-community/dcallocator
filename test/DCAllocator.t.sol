@@ -6,17 +6,12 @@ import {DCAllocator} from "../src/DCAllocator.sol";
 
 contract DCAllocatorTest is Test {
     DCAllocator public dcAllocator;
-    address[] public committee;
-    uint256 public threshold;
-    uint256 public maxCommitteeSize;
+    // 无委员会相关变量
 
     // 测试账户
     address public owner;
     address public user1;
     address public user2;
-    address public committeeMember1;
-    address public committeeMember2;
-    address public committeeMember3;
     address public vault;
 
     function setUp() public {
@@ -24,19 +19,7 @@ contract DCAllocatorTest is Test {
         owner = address(this);
         user1 = address(0x1);
         user2 = address(0x2);
-        committeeMember1 = address(0x3);
-        committeeMember2 = address(0x4);
-        committeeMember3 = address(0x5);
         vault = address(0x6);
-
-        // 设置委员会
-        committee = new address[](3);
-        committee[0] = committeeMember1;
-        committee[1] = committeeMember2;
-        committee[2] = committeeMember3;
-
-        threshold = 2;
-        // maxCommitteeSize = 5; // 删除
 
         // 部署合约
         address multisig = address(0x7);
@@ -97,17 +80,9 @@ contract DCAllocatorTest is Test {
         vm.prank(user1);
         dcAllocator.stake{value: 1 ether}(1);
 
-        // 委员会成员1提议slash
-        vm.prank(committeeMember1);
-        dcAllocator.slash(1, "test reason");
-
-        // 验证提议是否已添加
-        // address[] memory proposals = dcAllocator.getSlashProposals(1);
-        // assertEq(proposals.length, 1);
-        // assertEq(proposals[0], committeeMember1);
-
-        // 委员会成员2提议slash，达到阈值
-        vm.prank(committeeMember2);
+        // 由committeeMultisig地址执行slash
+        address multisig = address(0x7);
+        vm.prank(multisig);
         dcAllocator.slash(1, "test reason");
 
         // 验证质押是否已被slash
@@ -122,9 +97,9 @@ contract DCAllocatorTest is Test {
         // 验证 activeIssues 是否为空
         assertEq(dcAllocator.getActiveIssuesCount(), 0);
 
-        // 验证委员会成员3是否无法调用slash
-        vm.startPrank(committeeMember3);
-        vm.expectRevert("Only committee members can call this function");
+        // 非committeeMultisig调用slash应revert
+        vm.startPrank(user1);
+        vm.expectRevert("Only committee multisig can slash");
         dcAllocator.slash(1, "test reason");
         vm.stopPrank();
     }
@@ -185,10 +160,9 @@ contract DCAllocatorTest is Test {
         vm.prank(user1);
         dcAllocator.stake{value: 1 ether}(1);
 
-        // 委员会成员1和2提议slash，达到阈值
-        vm.prank(committeeMember1);
-        dcAllocator.slash(1, "test reason");
-        vm.prank(committeeMember2);
+        // 由committeeMultisig地址执行slash
+        address multisig = address(0x7);
+        vm.prank(multisig);
         dcAllocator.slash(1, "test reason");
 
         // 用户1尝试增加已被slash的质押金额，应该失败
@@ -206,7 +180,7 @@ contract DCAllocatorTest is Test {
 
         // 用户1尝试增加0金额，应该失败
         vm.prank(user1);
-        vm.expectRevert("Amount must be greater than 0");
+        vm.expectRevert("Amount must be >= 0.0001 ETH");
         dcAllocator.stakeMore{value: 0}(1);
     }
 
