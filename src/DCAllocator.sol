@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title DCAllocator
- * @dev 一个基于多签地址的质押与罚没管理合约
+ * @dev 一个基于委员会多签地址的质押与罚没管理合约
  *
  * 合约功能总结：
  * 1. 质押管理：
@@ -15,12 +15,12 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  *    - 用户可以通过stakeMore函数增加对已有issue的质押金额，同时会重置质押时间
  *    - 质押后需等待挑战期(默认180天)才能取回质押
  *
- * 2. 多签地址管理：
- *    - 合约拥有一个多签地址（multisig），只有该地址可以执行罚没操作
- *    - 合约拥有者可以设置多签地址
+ * 2. 委员会多签地址管理：
+ *    - 合约拥有一个委员会多签地址（committeeMultisig），只有该地址可以执行罚没操作
+ *    - 合约拥有者可以设置或更换委员会多签地址
  *
  * 3. 罚没机制：
- *    - 只有多签地址可以对质押执行罚没（slash）
+ *    - 只有委员会多签地址可以对质押执行罚没（slash）
  *    - 被罚没的资金将转移到指定的保险库地址
  *
  * 4. 活跃问题管理：
@@ -28,7 +28,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  *    - 当质押被取回或罚没时，相应的问题将从活跃列表中移除
  *
  * 安全特性：
- * - 只有合约拥有者可以修改关键参数(挑战期、保险库地址、多签地址)
+ * - 只有合约拥有者可以修改关键参数(挑战期、保险库地址、委员会多签地址)
  * - 使用重入锁防止重入攻击
  */
 
@@ -57,7 +57,8 @@ contract DCAllocator is ReentrancyGuard, Ownable {
     // 记录每个issue在activeIssues数组中的位置
     mapping(uint256 => uint256) public issueToIndex; // issue -> index in activeIssues
 
-    address public multisig; // 新增多签地址
+    // 委员会多签地址（只有该地址可以执行slash操作）
+    address public committeeMultisig;
 
     // 质押事件，当用户进行质押时触发
     event Staked(uint256 issue, address indexed user, uint256 amount, uint256 timestamp);
@@ -74,14 +75,14 @@ contract DCAllocator is ReentrancyGuard, Ownable {
     constructor(
         address _vault,
         uint256 _challengePeriod,
-        address _multisig
+        address _committeeMultisig
     ) Ownable(msg.sender){
         // 直接设置保险库地址和挑战期
         vault = _vault;
         if (_challengePeriod > 0) {
             challengePeriod = _challengePeriod * 1 days;
         }
-        multisig = _multisig;
+        committeeMultisig = _committeeMultisig;
     }
 
     // 设置挑战期期时长，单位：天
@@ -96,10 +97,10 @@ contract DCAllocator is ReentrancyGuard, Ownable {
         vault = _vault;
     }
 
-    // 新增设置多签地址的方法
-    function setMultisig(address _multisig) public onlyOwner {
-        require(_multisig != address(0), "Multisig address cannot be zero");
-        multisig = _multisig;
+    // 新增设置委员会多签地址的方法
+    function setCommitteeMultisig(address _committeeMultisig) public onlyOwner {
+        require(_committeeMultisig != address(0), "Committee multisig address cannot be zero");
+        committeeMultisig = _committeeMultisig;
     }
 
     // 质押函数，用户通过发送ETH来质押特定issue
@@ -154,9 +155,9 @@ contract DCAllocator is ReentrancyGuard, Ownable {
         emit Unstaked(issue, msg.sender, amount, block.timestamp);
     }
 
-    // 只允许 multisig 地址直接执行罚没
+    // 只允许委员会多签地址直接执行罚没
     function slash(uint256 issue) public nonReentrant {
-        require(msg.sender == multisig, "Only multisig can slash");
+        require(msg.sender == committeeMultisig, "Only committee multisig can slash");
         Stake storage targetStake = stakes[issue];
         require(targetStake.user != address(0), "No stake found");
         require(!targetStake.isSlash, "Already slashed");
