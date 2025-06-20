@@ -8,9 +8,6 @@ set -e
 # 默认参数
 NETWORK="cali"
 DEFAULT_RPC_URL="https://api.calibration.node.glif.io/rpc/v1"
-COMMITTEE="0x3dBcFd9a5d0534c675f529Aa0006918e4a658033,0x5a15CcF478922873375468626a8c44ffEd981802,0x1D38DB15DC600Bd73898F651d83D83808f6131Dd"
-THRESHOLD=2
-MAX_COMMITTEE_SIZE=5
 VAULT="0xEb756AAef793125EeFD409Ef3Bb20787FBC25c10"
 CHALLENGE_PERIOD=180  # 180天
 
@@ -19,18 +16,6 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --network)
       NETWORK="$2"
-      shift 2
-      ;;
-    --committee)
-      COMMITTEE="$2"
-      shift 2
-      ;;
-    --threshold)
-      THRESHOLD="$2"
-      shift 2
-      ;;
-    --max-committee)
-      MAX_COMMITTEE_SIZE="$2"
       shift 2
       ;;
     --vault)
@@ -45,9 +30,6 @@ while [[ $# -gt 0 ]]; do
       echo "用法: ./deploy.sh [options]"
       echo "选项:"
       echo "  --network <network>         指定网络 (cali, mainnet, anvil, localhost)"
-      echo "  --committee <addresses>     委员会成员地址，用逗号分隔"
-      echo "  --threshold <number>        委员会阈值"
-      echo "  --max-committee <number>    最大委员会人数"
       echo "  --vault <address>           保险库地址"
       echo "  --challenge-period <days>   挑战期（天）"
       echo "  --help                      显示帮助信息"
@@ -61,18 +43,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 # 导出环境变量，供Forge脚本使用
-export COMMITTEE="$COMMITTEE"
-export THRESHOLD="$THRESHOLD"
-export MAX_COMMITTEE_SIZE="$MAX_COMMITTEE_SIZE"
 export VAULT="$VAULT"
 export CHALLENGE_PERIOD="$CHALLENGE_PERIOD"
 
 # 显示配置信息
 echo "部署配置:"
 echo "网络: $NETWORK"
-echo "委员会成员: $COMMITTEE"
-echo "阈值: $THRESHOLD"
-echo "最大委员会人数: $MAX_COMMITTEE_SIZE"
 echo "保险库地址: $VAULT"
 echo "挑战期 (天): $CHALLENGE_PERIOD"
 

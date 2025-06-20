@@ -209,4 +209,35 @@ contract DCAllocatorTest is Test {
         vm.expectRevert("Amount must be greater than 0");
         dcAllocator.stakeMore{value: 0}(1);
     }
+
+    // 分页查询测试
+    function test_GetAllStakesPaged() public {
+        // 用户1质押 issue 1
+        vm.deal(user1, 1 ether);
+        vm.prank(user1);
+        dcAllocator.stake{value: 1 ether}(1);
+
+        // 用户2质押 issue 2
+        vm.deal(user2, 2 ether);
+        vm.prank(user2);
+        dcAllocator.stake{value: 2 ether}(2);
+
+        // 用户1取回 issue 1
+        vm.warp(block.timestamp + 181 days);
+        vm.prank(user1);
+        dcAllocator.unstake(1);
+
+        // 分页获取
+        DCAllocator.Stake[] memory page1 = dcAllocator.getAllStakesPaged(0, 1);
+        assertEq(page1.length, 1);
+        assertEq(page1[0].user, address(0)); // 已取回
+
+        DCAllocator.Stake[] memory page2 = dcAllocator.getAllStakesPaged(1, 1);
+        assertEq(page2.length, 1);
+        assertEq(page2[0].user, user2);
+
+        // 超出范围
+        DCAllocator.Stake[] memory emptyPage = dcAllocator.getAllStakesPaged(10, 5);
+        assertEq(emptyPage.length, 0);
+    }
 }
