@@ -99,7 +99,7 @@ contract DCAllocatorTest is Test {
 
         // 委员会成员1提议slash
         vm.prank(committeeMember1);
-        dcAllocator.slash(1);
+        dcAllocator.slash(1, "test reason");
 
         // 验证提议是否已添加
         // address[] memory proposals = dcAllocator.getSlashProposals(1);
@@ -108,7 +108,7 @@ contract DCAllocatorTest is Test {
 
         // 委员会成员2提议slash，达到阈值
         vm.prank(committeeMember2);
-        dcAllocator.slash(1);
+        dcAllocator.slash(1, "test reason");
 
         // 验证质押是否已被slash
         (address stakeUser, uint256 amount,, bool isSlash) = dcAllocator.stakes(1);
@@ -121,6 +121,12 @@ contract DCAllocatorTest is Test {
 
         // 验证 activeIssues 是否为空
         assertEq(dcAllocator.getActiveIssuesCount(), 0);
+
+        // 验证委员会成员3是否无法调用slash
+        vm.startPrank(committeeMember3);
+        vm.expectRevert("Only committee members can call this function");
+        dcAllocator.slash(1, "test reason");
+        vm.stopPrank();
     }
 
     function test_SetVault() public {
@@ -181,9 +187,9 @@ contract DCAllocatorTest is Test {
 
         // 委员会成员1和2提议slash，达到阈值
         vm.prank(committeeMember1);
-        dcAllocator.slash(1);
+        dcAllocator.slash(1, "test reason");
         vm.prank(committeeMember2);
-        dcAllocator.slash(1);
+        dcAllocator.slash(1, "test reason");
 
         // 用户1尝试增加已被slash的质押金额，应该失败
         vm.deal(user1, 0.5 ether);

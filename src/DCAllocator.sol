@@ -44,15 +44,19 @@ contract DCAllocator is ReentrancyGuard, Ownable {
         uint256 timestamp; // 质押时间戳
         bool isSlash; // 是否已被罚没
     }
-    // 被slash的token会转移到这个地址
 
+    // 被slash的token会转移到这个地址
     address public vault;
+
     // 挑战期，默认为180天，用户必须等待这段时间后才能取回质押
     uint256 public challengePeriod = 180 days;
+
     // 质押映射，issue ID => Stake结构体
     mapping(uint256 => Stake) public stakes;
+
     // 跟踪所有活跃的 issue
     uint256[] public activeIssues;
+
     // issue ID到数组索引的映射，用于O(1)时间复杂度查找和删除
     // 记录每个issue在activeIssues数组中的位置
     mapping(uint256 => uint256) public issueToIndex; // issue -> index in activeIssues
@@ -64,8 +68,8 @@ contract DCAllocator is ReentrancyGuard, Ownable {
     event Staked(uint256 issue, address indexed user, uint256 amount, uint256 timestamp);
     // 取回质押事件，当用户成功取回质押时触发
     event Unstaked(uint256 issue, address indexed user, uint256 amount, uint256 timestamp);
-    // 罚没事件，当质押被成功罚没时触发，包含所有投票的委员会成员
-    event Slashed(uint256 issue, address indexed user, uint256 amount, uint256 timestamp, address[] committeeMembers);
+    // 罚没事件，当质押被成功罚没时触发，包含所有投票的委员会成员和处罚理由
+    event Slashed(uint256 issue, address indexed user, uint256 amount, uint256 timestamp, address[] committeeMembers, string reason);
     // 增加质押金额事件，当用户对已有质押增加金额时触发
     event StakedMore(
         uint256 issue, address indexed user, uint256 additionalAmount, uint256 newAmount, uint256 timestamp
@@ -156,7 +160,7 @@ contract DCAllocator is ReentrancyGuard, Ownable {
     }
 
     // 只允许委员会多签地址直接执行罚没
-    function slash(uint256 issue) public nonReentrant {
+    function slash(uint256 issue, string memory reason) public nonReentrant {
         require(msg.sender == committeeMultisig, "Only committee multisig can slash");
         Stake storage targetStake = stakes[issue];
         require(targetStake.user != address(0), "No stake found");
@@ -174,7 +178,7 @@ contract DCAllocator is ReentrancyGuard, Ownable {
         // 只记录多签地址为唯一提议者
         address[] memory committeeMembers = new address[](1);
         committeeMembers[0] = msg.sender;
-        emit Slashed(issue, targetStake.user, amount, block.timestamp, committeeMembers);
+        emit Slashed(issue, targetStake.user, amount, block.timestamp, committeeMembers, reason);
     }
 
     // 获取活跃问题的数量
