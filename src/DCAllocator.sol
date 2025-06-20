@@ -72,7 +72,9 @@ contract DCAllocator is ReentrancyGuard, Ownable {
     // 取回质押事件，当用户成功取回质押时触发
     event Unstaked(uint256 issue, address indexed user, uint256 amount, uint256 timestamp);
     // 罚没事件，当质押被成功罚没时触发，记录委员会多签地址和处罚理由
-    event Slashed(uint256 issue, address indexed user, uint256 amount, uint256 timestamp, address committeeMultisig, string reason);
+    event Slashed(
+        uint256 issue, address indexed user, uint256 amount, uint256 timestamp, address committeeMultisig, string reason
+    );
     // 增加质押金额事件，当用户对已有质押增加金额时触发
     event StakedMore(
         uint256 issue, address indexed user, uint256 additionalAmount, uint256 newAmount, uint256 timestamp
@@ -82,11 +84,7 @@ contract DCAllocator is ReentrancyGuard, Ownable {
     uint256 public constant MAX_STAKE = 100 ether;
 
     // 构造函数，初始化合约的基本参数
-    constructor(
-        address _vault,
-        uint256 _challengePeriod,
-        address _committeeMultisig
-    ) Ownable(msg.sender){
+    constructor(address _vault, uint256 _challengePeriod, address _committeeMultisig) Ownable(msg.sender) {
         // 直接设置保险库地址和挑战期
         vault = _vault;
         if (_challengePeriod > 0) {
@@ -101,7 +99,7 @@ contract DCAllocator is ReentrancyGuard, Ownable {
         challengePeriod = _challengePeriod;
     }
 
-        // 设置保险库地址，只有合约拥有者可以调用
+    // 设置保险库地址，只有合约拥有者可以调用
     function setVault(address _vault) public onlyOwner {
         require(_vault != address(0), "Vault address cannot be zero");
         vault = _vault;
@@ -156,16 +154,16 @@ contract DCAllocator is ReentrancyGuard, Ownable {
         require(block.timestamp > targetStake.timestamp + challengePeriod, "Challenge period not over");
 
         uint256 amount = targetStake.amount;
-        
+
         // 先更新状态
         targetStake.amount = 0;
         targetStake.user = address(0);
         removeActiveIssue(issue);
 
         // 最后进行外部调用
-        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        (bool success,) = payable(msg.sender).call{value: amount}("");
         require(success, "Transfer failed");
-        
+
         emit Unstaked(issue, msg.sender, amount, block.timestamp);
     }
 
@@ -182,7 +180,7 @@ contract DCAllocator is ReentrancyGuard, Ownable {
         removeActiveIssue(issue);
 
         // 直接转账到保险库
-        (bool success, ) = payable(vault).call{value: amount}("");
+        (bool success,) = payable(vault).call{value: amount}("");
         require(success, "Transfer failed");
 
         emit Slashed(issue, targetStake.user, amount, block.timestamp, committeeMultisig, reason);
