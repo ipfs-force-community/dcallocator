@@ -221,4 +221,22 @@ contract DCAllocator is ReentrancyGuard, Ownable {
         }
         return stakesList;
     }
+
+    // 分页获取所有历史质押（包括已结束和被罚没）的详细信息
+    function getAllStakesPaged(uint256 offset, uint256 limit) public view returns (Stake[] memory) {
+        uint256 total = allIssues.length;
+        if (offset >= total) {
+            return new Stake[](0);
+        }
+        uint256 end = offset + limit;
+        if (end > total) {
+            end = total;
+        }
+        uint256 resultLen = end - offset;
+        Stake[] memory stakesList = new Stake[](resultLen);
+        for (uint256 i = 0; i < resultLen; i++) {
+            stakesList[i] = stakes[allIssues[offset + i]];
+        }
+        return stakesList;
+    }
 }
