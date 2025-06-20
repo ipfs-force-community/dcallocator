@@ -57,6 +57,9 @@ contract DCAllocator is ReentrancyGuard, Ownable {
     // 跟踪所有活跃的 issue
     uint256[] public activeIssues;
 
+    // 新增：跟踪所有出现过的 issue
+    uint256[] public allIssues;
+
     // issue ID到数组索引的映射，用于O(1)时间复杂度查找和删除
     // 记录每个issue在activeIssues数组中的位置
     mapping(uint256 => uint256) public issueToIndex; // issue -> index in activeIssues
@@ -74,6 +77,9 @@ contract DCAllocator is ReentrancyGuard, Ownable {
     event StakedMore(
         uint256 issue, address indexed user, uint256 additionalAmount, uint256 newAmount, uint256 timestamp
     );
+
+    uint256 public constant MIN_STAKE = 0.0001 ether;
+    uint256 public constant MAX_STAKE = 100 ether;
 
     // 构造函数，初始化合约的基本参数
     constructor(
@@ -110,7 +116,8 @@ contract DCAllocator is ReentrancyGuard, Ownable {
     // 质押函数，用户通过发送ETH来质押特定issue
     // 每个issue只能被质押一次
     function stake(uint256 issue) public payable {
-        require(msg.value > 0, "Amount must be greater than 0");
+        require(msg.value >= MIN_STAKE, "Amount must be >= 0.0001 ETH");
+        require(msg.value <= MAX_STAKE, "Amount must be <= 100 ETH");
         require(stakes[issue].user == address(0), "Issue already staked");
 
         // 创建质押记录
@@ -119,6 +126,8 @@ contract DCAllocator is ReentrancyGuard, Ownable {
         // 添加到活跃问题列表
         issueToIndex[issue] = activeIssues.length;
         activeIssues.push(issue);
+        // 新增：添加到所有问题列表
+        allIssues.push(issue);
 
         emit Staked(issue, msg.sender, msg.value, block.timestamp);
     }
@@ -128,7 +137,8 @@ contract DCAllocator is ReentrancyGuard, Ownable {
         Stake storage targetStake = stakes[issue];
         require(targetStake.user == msg.sender, "Not the staker");
         require(!targetStake.isSlash, "Stake has been slashed");
-        require(msg.value > 0, "Amount must be greater than 0");
+        require(msg.value >= MIN_STAKE, "Amount must be >= 0.0001 ETH");
+        require(msg.value <= MAX_STAKE, "Amount must be <= 100 ETH");
 
         uint256 additionalAmount = msg.value;
         uint256 newAmount = targetStake.amount + additionalAmount;
@@ -190,5 +200,25 @@ contract DCAllocator is ReentrancyGuard, Ownable {
         issueToIndex[activeIssues[activeIssues.length - 1]] = index;
         activeIssues.pop();
         delete issueToIndex[issue];
+    }
+
+    // 获取所有活跃质押的详细信息
+    function getAllActiveStakes() public view returns (Stake[] memory) {
+        uint256 count = activeIssues.length;
+        Stake[] memory stakesList = new Stake[](count);
+        for (uint256 i = 0; i < count; i++) {
+            stakesList[i] = stakes[activeIssues[i]];
+        }
+        return stakesList;
+    }
+
+    // 获取所有历史质押（包括已结束和被罚没）的详细信息
+    function getAllStakes() public view returns (Stake[] memory) {
+        uint256 count = allIssues.length;
+        Stake[] memory stakesList = new Stake[](count);
+        for (uint256 i = 0; i < count; i++) {
+            stakesList[i] = stakes[allIssues[i]];
+        }
+        return stakesList;
     }
 }
