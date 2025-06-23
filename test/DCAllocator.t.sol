@@ -42,7 +42,9 @@ contract DCAllocatorTest is Test {
         assertFalse(isSlash);
 
         // 验证 activeIssues 是否正确更新
-        assertEq(dcAllocator.activeIssues(0), 1);
+        DCAllocator.Stake[] memory actives = dcAllocator.getAllActiveStakes();
+        assertEq(actives.length, 1);
+        assertEq(actives[0].user, user1);
     }
 
     function test_Unstake() public {

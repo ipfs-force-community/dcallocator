@@ -55,14 +55,14 @@ contract DCAllocator is ReentrancyGuard, Ownable {
     mapping(uint256 => Stake) public stakes;
 
     // 跟踪所有活跃的 issue
-    uint256[] public activeIssues;
+    uint256[] private activeIssues;
 
     // 新增：跟踪所有出现过的 issue
-    uint256[] public allIssues;
+    uint256[] private allIssues;
 
     // issue ID到数组索引的映射，用于O(1)时间复杂度查找和删除
     // 记录每个issue在activeIssues数组中的位置
-    mapping(uint256 => uint256) public issueToIndex; // issue -> index in activeIssues
+    mapping(uint256 => uint256) private issueToIndex; // issue -> index in activeIssues
 
     // 委员会多签地址（只有该地址可以执行slash操作）
     address public committeeMultisig;
