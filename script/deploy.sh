@@ -53,7 +53,7 @@ case "$NETWORK" in
     ;;
   mainnet)
     echo "主网部署..."
-    forge script script/Deploy.s.sol:DeployScript --rpc-url "$RPC_URL" --broadcast --private-key "$PRIVATE_KEY" --verify
+    forge script script/Deploy.s.sol:DeployScript --rpc-url "$RPC_URL" --broadcast --private-key "$PRIVATE_KEY" --verify --gas-estimate-multiplier 8000
     ;;
   *)
     echo "不支持的网络: $NETWORK"
